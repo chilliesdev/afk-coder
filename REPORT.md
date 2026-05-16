@@ -48,13 +48,33 @@ The **Gemini AFK Coding Daemon** implementation is substantially complete and al
 
 1.  **Containerize `init`:** Refactor `afk-coder init` to run the task extraction inside a temporary Docker container, similar to how tasks are executed. This eliminates the host-side dependency on the `gemini` CLI.
 2.  **Explicit Socket Group:** Consider creating a dedicated group (e.g., `afk-coder-users`) and setting the Unix socket group to this, allowing users to be added to it for CLI access.
-3.  **Structured Model Output:** If possible, use a `--json` or similar flag with the `gemini` CLI to get structured token usage and status updates, rather than parsing stdout with regex.
-4.  **Improved Error Reporting:** Enhance the CLI to provide more specific advice when the daemon is not running or the socket is inaccessible.
+3. **Structured Model Output:** If possible, use a `--json` or similar flag with the `gemini` CLI to get structured token usage and status updates, rather than parsing stdout with regex.
 
-## 5. References
+## 5. Testing and Quality
+
+### 5.1. Test Coverage Status
+
+| Area | Status | Description |
+| :--- | :--- | :--- |
+| **Workflow Management** | Comprehensive | Covered by `workflow-integration.test.ts` and `workflow-manager.test.ts`. |
+| **Resilience** | Good | Covered by `workflow-manager-resilience.test.ts` (429 handling, token parsing). |
+| **Validation** | Good | Covered by `workflow-manager.test.ts` and `cli.test.ts`. |
+| **Config & Tokens** | Good | Covered by `config.test.ts`. |
+| **Sandbox (Logic)** | Good | Covered by `sandbox.test.ts` (container creation, log demuxing). |
+| **CLI Commands** | Partial | `init` and `validation` covered in `cli.test.ts`. `start`/`list`/`kill` logic not fully tested. |
+| IPC / Unix Socket | Good | Enhanced error messages for daemon connection issues (ENOENT, ECONNREFUSED, EACCES). |
+| **System Integration** | Missing | No tests running real Docker containers or full OAuth flows. |
+
+### 5.2. Recent Improvements
+
+*   **Config Management Tests:** Added tests for loading/saving configuration and token management, ensuring that default values are handled correctly.
+*   **Sandbox Logic Verification:** Implemented unit tests for the `Sandbox` class to verify Docker container options and the complex logic for demultiplexing Docker log streams.
+*   **CLI & Validation:** Expanded validation tests to cover `validateWorkflowDir`, which is critical for pre-flight checks before starting a workflow.
+
+## 6. References
 
 *   [PRD.md](PRD.md)
+*   [tests/](tests/)
 *   [src/cli/index.ts](src/cli/index.ts)
 *   [src/daemon/workflow-manager.ts](src/daemon/workflow-manager.ts)
 *   [src/sandbox/index.ts](src/sandbox/index.ts)
-*   [debian/postinst](debian/postinst)

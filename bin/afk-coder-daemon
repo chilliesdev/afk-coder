@@ -4,9 +4,10 @@ const fs = require('fs');
 
 // Try to find dist in several locations
 const possiblePaths = [
-  path.join(__dirname, '../dist/daemon/index.js'), // Development
-  '/usr/local/lib/afk-coder/dist/daemon/index.js',  // Installed
-  '/usr/lib/afk-coder/dist/daemon/index.js'         // Alternative installed
+  path.join(__dirname, '../dist/src/daemon/index.js'), // Development (nested)
+  path.join(__dirname, '../dist/daemon/index.js'),     // Development
+  '/usr/local/lib/afk-coder/dist/daemon/index.js',     // Installed
+  '/usr/lib/afk-coder/dist/daemon/index.js'            // Alternative installed
 ];
 
 let found = false;
