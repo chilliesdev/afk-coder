@@ -20,6 +20,9 @@ describe('Config Management', () => {
       memory: 1024,
       nanoCpus: 1000000000,
     },
+    daemon: {
+      socketGroup: 'custom-group',
+    },
     auth: {
       clientId: 'test-client-id',
       clientSecret: 'test-client-secret',
@@ -42,6 +45,7 @@ describe('Config Management', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       const config = loadConfig();
       expect(config.sandbox.image).toContain('gemini-cli/sandbox');
+      expect(config.daemon?.socketGroup).toBe('afk-coder-users');
       expect(config.geminiPath).toBe('gemini');
     });
 
@@ -50,6 +54,7 @@ describe('Config Management', () => {
       (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockConfig));
       const config = loadConfig();
       expect(config.sandbox.image).toBe('test-image');
+      expect(config.daemon?.socketGroup).toBe('custom-group');
       expect(config.auth?.clientId).toBe('test-client-id');
       expect(config.geminiPath).toBe('test-gemini');
     });

@@ -1,10 +1,13 @@
 import * as net from 'net';
 import * as fs from 'fs';
+import * as child_process from 'child_process';
 import { WorkflowManager } from './workflow-manager';
 import { DaemonResponse } from '../common/types';
+import { loadConfig } from '../common/config';
 
 const SOCKET_PATH = '/tmp/afk-coder.sock';
 const workflowManager = new WorkflowManager();
+const config = loadConfig();
 
 if (fs.existsSync(SOCKET_PATH)) {
   fs.unlinkSync(SOCKET_PATH);
@@ -52,8 +55,25 @@ server.listen(SOCKET_PATH, () => {
   try {
     fs.chmodSync(SOCKET_PATH, '660');
     console.log(`Socket permissions set to 660`);
+
+    const socketGroup = config.daemon?.socketGroup;
+    if (socketGroup) {
+      try {
+        // Try to get GID for the group
+        const gid = child_process.execSync(`getent group ${socketGroup} | cut -d: -f3`, { encoding: 'utf8' }).trim();
+        if (gid) {
+          const uid = process.getuid ? process.getuid() : 0;
+          fs.chownSync(SOCKET_PATH, uid, parseInt(gid));
+          console.log(`Socket group ownership set to ${socketGroup} (${gid})`);
+        } else {
+          console.warn(`Could not find GID for group: ${socketGroup}`);
+        }
+      } catch (err: any) {
+        console.warn(`Failed to set socket group ownership to ${socketGroup}: ${err.message}`);
+      }
+    }
   } catch (err: any) {
-    console.warn(`Failed to set socket permissions: ${err.message}`);
+    console.warn(`Failed to set socket permissions/ownership: ${err.message}`);
   }
 });
 

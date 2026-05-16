@@ -46,14 +46,36 @@ chmod +x install.sh
 
 This script will:
 1. Build the project.
-2. Create a dedicated `afk-coder` system user.
-3. Install binaries to `/usr/local/bin/`.
-4. Register and enable the `afk-coder.service` systemd unit.
+2. Create dedicated `afk-coder` (service) and `afk-coder-users` (access) groups.
+3. Create a dedicated `afk-coder` system user.
+4. Install binaries to `/usr/local/bin/`.
+5. Register and enable the `afk-coder.service` systemd unit.
+
+### User Access
+By default, the daemon socket is owned by the `afk-coder-users` group. To allow a non-root user to use the `afk-coder` CLI, add them to this group:
+
+```bash
+sudo usermod -aG afk-coder-users $USER
+# Log out and back in for changes to take effect
+```
 
 Finally, start the daemon:
 ```bash
 sudo systemctl start afk-coder
 ```
+
+---
+
+## ⚙️ Configuration
+
+You can customize the daemon and sandbox behavior by editing `~/.config/af-coder/config.json`.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `daemon.socketGroup` | `"afk-coder-users"` | The Unix group that will own the control socket. |
+| `sandbox.image` | (latest stable) | The Docker image used for the execution sandbox. |
+| `sandbox.memory` | `2147483648` | Memory limit for the sandbox (bytes). |
+| `sandbox.nanoCpus` | `2000000000` | CPU limit for the sandbox (nano CPUs). |
 
 ---
 

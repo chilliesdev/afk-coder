@@ -5,9 +5,16 @@ if [ "$1" = "configure" ]; then
     if ! getent group afk-coder >/dev/null; then
         addgroup --system afk-coder
     fi
+    if ! getent group afk-coder-users >/dev/null; then
+        addgroup --system afk-coder-users
+    fi
     if ! getent passwd afk-coder >/dev/null; then
         adduser --system --ingroup afk-coder --no-create-home --home /var/lib/afk-coder --shell /bin/false afk-coder
     fi
+    
+    # Add afk-coder to afk-coder-users group
+    adduser afk-coder afk-coder-users || true
+
     # Add to docker group to allow running containers
     if getent group docker >/dev/null; then
         adduser afk-coder docker

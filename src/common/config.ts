@@ -12,6 +12,9 @@ export interface Config {
     memory: number;
     nanoCpus: number;
   };
+  daemon?: {
+    socketGroup?: string;
+  };
   auth?: {
     clientId: string;
     clientSecret: string;
@@ -25,6 +28,9 @@ const DEFAULT_CONFIG: Config = {
     image: 'us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0',
     memory: 2 * 1024 * 1024 * 1024, // 2GB
     nanoCpus: 2000000000, // 2 CPUs
+  },
+  daemon: {
+    socketGroup: 'afk-coder-users',
   },
   auth: {
     clientId: '',
@@ -50,6 +56,10 @@ export function loadConfig(): Config {
         sandbox: {
           ...DEFAULT_CONFIG.sandbox,
           ...userConfig.sandbox,
+        },
+        daemon: {
+          ...DEFAULT_CONFIG.daemon,
+          ...userConfig.daemon,
         },
         auth: {
           ...DEFAULT_CONFIG.auth,

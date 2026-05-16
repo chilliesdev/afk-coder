@@ -41,14 +41,13 @@ The **Gemini AFK Coding Daemon** implementation is substantially complete and al
 
 1.  **`init` Command Dependency:** The `afk-coder init` command requires the `gemini` CLI to be installed and available in the host's `PATH`. This is a hidden dependency that might not be met on all systems. While noted in `debian/control`, it would be more robust to run this inside a sandbox as well.
 2.  **`init` Authentication:** The `init` command does not currently leverage the OAuth tokens acquired via `afk-coder login`. If the local `gemini` CLI requires authentication, it might fail even if the user has "logged in" to `afk-coder`.
-3.  **Unix Socket Permissions:** The daemon sets socket permissions to `660`. This requires the user running the CLI to be in the same group as the daemon (`afk-coder`). The current setup adds the `afk-coder` user to the `docker` group, but doesn't explicitly handle how regular users will access the daemon's socket.
+3.  **Unix Socket Permissions:** The daemon sets socket permissions to `660` and changes group ownership to `afk-coder-users` by default. This allows users added to the `afk-coder-users` group to have CLI access without needing full root or `afk-coder` user privileges.
 4.  **Token Usage Regex:** The extraction of token usage from logs relies on multiple regex patterns in `WorkflowManager.ts`. While thorough, this is inherently brittle if the `gemini` CLI output format changes significantly.
 
 ## 4. Recommendations
 
 1.  **Containerize `init`:** Refactor `afk-coder init` to run the task extraction inside a temporary Docker container, similar to how tasks are executed. This eliminates the host-side dependency on the `gemini` CLI.
-2.  **Explicit Socket Group:** Consider creating a dedicated group (e.g., `afk-coder-users`) and setting the Unix socket group to this, allowing users to be added to it for CLI access.
-3. **Structured Model Output:** If possible, use a `--json` or similar flag with the `gemini` CLI to get structured token usage and status updates, rather than parsing stdout with regex.
+2. **Structured Model Output:** If possible, use a `--json` or similar flag with the `gemini` CLI to get structured token usage and status updates, rather than parsing stdout with regex.
 
 ## 5. Testing and Quality
 
@@ -67,6 +66,7 @@ The **Gemini AFK Coding Daemon** implementation is substantially complete and al
 
 ### 5.2. Recent Improvements
 
+*   **Explicit Socket Group:** Created a dedicated group (`afk-coder-users`) and added logic to the daemon to set the Unix socket group to this. Installation scripts now handle group creation and membership.
 *   **Config Management Tests:** Added tests for loading/saving configuration and token management, ensuring that default values are handled correctly.
 *   **Sandbox Logic Verification:** Implemented unit tests for the `Sandbox` class to verify Docker container options and the complex logic for demultiplexing Docker log streams.
 *   **CLI & Validation:** Expanded validation tests to cover `validateWorkflowDir`, which is critical for pre-flight checks before starting a workflow.

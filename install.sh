@@ -12,12 +12,17 @@ if ! command -v gemini &> /dev/null; then
     echo "Ensure it is installed and in your PATH (e.g., npm install -g @google/gemini-cli)."
 fi
 
-# Create afk-coder user and group if they don't exist
+# Create afk-coder user and groups if they don't exist
 if ! getent group afk-coder > /dev/null; then
     sudo groupadd afk-coder
 fi
+if ! getent group afk-coder-users > /dev/null; then
+    sudo groupadd afk-coder-users
+fi
 if ! getent passwd afk-coder > /dev/null; then
-    sudo useradd -r -g afk-coder -s /sbin/nologin afk-coder
+    sudo useradd -r -g afk-coder -G afk-coder-users -s /sbin/nologin afk-coder
+else
+    sudo usermod -aG afk-coder-users afk-coder
 fi
 
 # Add afk-coder to docker group so it can run containers
