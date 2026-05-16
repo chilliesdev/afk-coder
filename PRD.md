@@ -2,7 +2,7 @@
 
 ## 1. Product Overview
 
-The **Gemini AFK Coding Daemon** is a background-managed, autonomous coding assistant tailored for Ubuntu servers. It leverages the Gemini CLI (powered by the Gemini 2.5 Pro model via a Google AI Pro 2 subscription) to execute software development tasks continuously without human intervention. The system relies on human-in-the-loop (HITL) task generation, followed by a fully autonomous execution loop enclosed within a secure, root-privileged sandbox.
+The **Gemini AFK Coding Daemon** is a background-managed, autonomous coding assistant tailored for Ubuntu servers. It is implemented in **TypeScript** and leverages the Gemini CLI (powered by the Gemini 2.5 Pro model) to execute software development tasks continuously. The system utilizes **Google OAuth 2.0** as its primary authentication mechanism, allowing it to leverage the user's **Google AI Pro subscription** securely. The system relies on human-in-the-loop (HITL) task generation, followed by a fully autonomous execution loop enclosed within a secure, root-privileged sandbox.
 
 ## 2. Goals & Objectives
 
@@ -42,6 +42,12 @@ The **Gemini AFK Coding Daemon** is a background-managed, autonomous coding assi
 ### 4.1. CLI Commands & Interface
 
 The application must expose a main command-line interface (e.g., `afk-coder`).
+
+* **`afk-coder login`**
+* Initiates the Google OAuth 2.0 flow (e.g., via a device code or browser-based PKCE flow).
+* Exchanges the authorization code for access and refresh tokens.
+* Securely stores tokens for use by the background daemon.
+
 
 * **`afk-coder start <workflow_name> [--dir <path>]`**
 * Validates the presence and format of `PRD.md` and `tasks.md`.
@@ -88,9 +94,15 @@ The application must expose a main command-line interface (e.g., `afk-coder`).
 
 The system will consist of three primary components:
 
-1. **The CLI Client:** A lightweight frontend written in Bash, Python, or Go that interacts with the user, parses arguments, and communicates with the Daemon.
-2. **The Service Daemon:** A `systemd`-managed background process that queues workflows, manages state, monitors progress, and exposes a Unix socket or local port for the CLI client to query.
-3. **The Execution Sandbox:** Ephemeral, isolated containers spun up by the Daemon for each workflow.
+1. **The CLI Client:** A TypeScript/Node.js frontend that interacts with the user, parses arguments, and communicates with the Daemon.
+2. **The Service Daemon:** A `systemd`-managed Node.js process that queues workflows, manages state, monitors progress, handles Google OAuth 2.0 authentication, and exposes a Unix socket or local port for the CLI client to query.
+3. **The Execution Sandbox:** Ephemeral, isolated containers (e.g., using `bubblewrap` or `Docker`) spun up by the Daemon for each workflow.
+
+### 5.1. Authentication & Authorization
+
+* **Mechanism:** Google OAuth 2.0 (Authorization Code Flow with PKCE for CLI or Device Flow).
+* **Subscription Integration:** The OAuth flow will authenticate the user's Google account to access Gemini Pro models under their subscription.
+* **Token Management:** The Daemon will securely store and refresh OAuth tokens to maintain continuous operation.
 
 ### Architecture Diagram Details (Conceptual)
 
