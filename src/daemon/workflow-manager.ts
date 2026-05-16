@@ -40,7 +40,8 @@ export class WorkflowManager {
   }
 
   startWorkflow(name: string, dir: string) {
-    if (this.workflows.has(name)) {
+    const existing = this.workflows.get(name);
+    if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed')) {
       throw new Error(`Workflow ${name} is already running`);
     }
 
@@ -50,7 +51,7 @@ export class WorkflowManager {
 
     const { tasks, pendingTasks } = validateWorkflowDir(dir);
 
-    const workflow: Workflow = {
+    const workflow: WorkflowRuntime = {
       name,
       dir,
       uptime: Date.now(),
@@ -244,6 +245,20 @@ export class WorkflowManager {
       await workflow.stopHandle();
       workflow.stopHandle = undefined;
     }
+  }
+
+  removeWorkflow(name: string) {
+    const workflow = this.workflows.get(name);
+    if (!workflow) {
+      throw new Error(`Workflow ${name} not found`);
+    }
+
+    if (workflow.status !== 'Done' && !workflow.status.startsWith('Failed')) {
+      throw new Error(`Workflow ${name} is still running. Kill it first.`);
+    }
+
+    this.workflows.delete(name);
+    this.loggers.delete(name);
   }
 
   getLogs(name: string, options: { tail?: number, offset?: number } = {}) {

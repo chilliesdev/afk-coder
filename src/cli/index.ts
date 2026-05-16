@@ -16,6 +16,7 @@ program
   .command('init')
   .description('Generate tasks.md from PRD.md')
   .option('--dir <path>', 'Directory containing PRD.md', '.')
+  .option('--force', 'Overwrite existing tasks.md')
   .action(async (options) => {
     const { Sandbox } = await import('../sandbox');
     const sandbox = new Sandbox();
@@ -26,6 +27,11 @@ program
 
     if (!fs.existsSync(prdPath)) {
       console.error(`Error: PRD.md not found in ${dir}`);
+      return;
+    }
+
+    if (fs.existsSync(tasksPath) && !options.force) {
+      console.error(`Error: tasks.md already exists in ${dir}. Use --force to overwrite.`);
       return;
     }
 
@@ -101,7 +107,7 @@ program
     const oAuth2Client = new OAuth2Client(
       clientId,
       clientSecret,
-      'http://localhost:3000'
+      config.auth?.redirectUri
     );
 
     const authUrl = oAuth2Client.generateAuthUrl({
@@ -143,7 +149,7 @@ program
   .option('--dir <path>', 'Implementation directory')
   .action(async (workflowName, options) => {
     try {
-      const dir = options.dir ? path.resolve(options.dir) : path.resolve(`./${workflowName}_impl`);
+      const dir = path.resolve(options.dir || '.');
       
       // Validate locally before sending to daemon
       try {
@@ -200,6 +206,22 @@ program
         console.log(`Workflow ${workflowName} killed.`);
       } else {
         console.error(`Failed to kill workflow: ${response.message}`);
+      }
+    } catch (err: any) {
+      console.error(err.message);
+    }
+  });
+
+program
+  .command('remove <workflow_name>')
+  .description('Remove a finished or failed workflow from the daemon')
+  .action(async (workflowName) => {
+    try {
+      const response = await sendCommand('remove', { name: workflowName });
+      if (response.success) {
+        console.log(`Workflow ${workflowName} removed.`);
+      } else {
+        console.error(`Failed to remove workflow: ${response.message}`);
       }
     } catch (err: any) {
       console.error(err.message);

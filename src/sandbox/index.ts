@@ -24,6 +24,13 @@ export class Sandbox {
     await refreshToken();
     const tokens = loadTokens();
     const config = loadConfig();
+    const hasApiKey = !!process.env['GEMINI_API_KEY'];
+    const hasTokens = !!(tokens && tokens.access_token);
+
+    if (!hasApiKey && !hasTokens) {
+      throw new Error('Authentication required. Please run "afk-coder login" or set the GEMINI_API_KEY environment variable.');
+    }
+    
     const env = [
       `GEMINI_API_KEY=${process.env['GEMINI_API_KEY'] || ''}`,
     ];
@@ -32,6 +39,16 @@ export class Sandbox {
       if (tokens.access_token) env.push(`GOOGLE_ACCESS_TOKEN=${tokens.access_token}`);
       if (tokens.refresh_token) env.push(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
     }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.auth?.clientSecret;
+
+    if (clientId) env.push(`GOOGLE_CLIENT_ID=${clientId}`);
+    if (clientSecret) env.push(`GOOGLE_CLIENT_SECRET=${clientSecret}`);
+    
+    // Also pass through common Gemini CLI auth vars if present on host
+    if (process.env.GEMINI_CLI_AUTH_METHOD) env.push(`GEMINI_CLI_AUTH_METHOD=${process.env.GEMINI_CLI_AUTH_METHOD}`);
+    if (process.env.GEMINI_PROJECT_ID) env.push(`GEMINI_PROJECT_ID=${process.env.GEMINI_PROJECT_ID}`);
 
     const image = config.sandbox.image;
     await this.ensureImage(image);

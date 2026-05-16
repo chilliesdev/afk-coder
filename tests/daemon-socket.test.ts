@@ -25,7 +25,8 @@ describe('Daemon Socket Group Ownership', () => {
     
     (loadConfig as jest.Mock).mockReturnValue({
       daemon: {
-        socketGroup: 'afk-coder-users'
+        socketGroup: 'afk-coder-users',
+        socketPath: '/tmp/afk-coder.sock'
       }
     });
 

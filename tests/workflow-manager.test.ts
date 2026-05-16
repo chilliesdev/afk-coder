@@ -27,6 +27,15 @@ describe('Validation', () => {
         { completed: true, description: 'Task 3' },
       ]);
     });
+
+    it('should handle literal \\n characters', () => {
+      const content = '- [ ] Task 1\\n- [ ] Task 2';
+      const tasks = parseTasks(content);
+      expect(tasks).toEqual([
+        { completed: false, description: 'Task 1' },
+        { completed: false, description: 'Task 2' },
+      ]);
+    });
   });
 
   describe('validateTasks', () => {

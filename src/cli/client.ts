@@ -1,10 +1,16 @@
 import * as net from 'net';
 import { DaemonResponse } from '../common/types';
+import { loadConfig } from '../common/config';
 
-const SOCKET_PATH = '/tmp/afk-coder.sock';
+const config = loadConfig();
+const SOCKET_PATH = config.daemon?.socketPath || '/tmp/afk-coder.sock';
 
 export async function sendCommand(command: string, args: any = {}): Promise<DaemonResponse> {
   return new Promise((resolve, reject) => {
+    if (!SOCKET_PATH) {
+      reject(new Error('Socket path is not defined in the config.'));
+      return;
+    }
     const client = net.createConnection(SOCKET_PATH, () => {
       client.write(JSON.stringify({ command, args }));
     });

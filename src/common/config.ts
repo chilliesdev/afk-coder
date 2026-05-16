@@ -14,11 +14,13 @@ export interface Config {
   };
   daemon?: {
     socketGroup?: string;
+    socketPath?: string;
   };
   auth?: {
     clientId: string;
     clientSecret: string;
     scopes?: string[];
+    redirectUri?: string;
   };
 }
 
@@ -30,11 +32,13 @@ const DEFAULT_CONFIG: Config = {
   },
   daemon: {
     socketGroup: 'afk-coder-users',
+    socketPath: '/tmp/afk-coder.sock',
   },
   auth: {
     clientId: '',
     clientSecret: '',
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    redirectUri: 'http://localhost:3000',
   },
 };
 

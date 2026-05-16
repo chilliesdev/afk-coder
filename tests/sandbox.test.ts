@@ -72,6 +72,22 @@ describe('Sandbox', () => {
     expect(result.pid).toBe(1234);
   });
 
+  it('should propagate GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET if present in config', async () => {
+    (config.loadConfig as jest.Mock).mockReturnValue({
+      sandbox: { image: 'test-image' },
+      auth: { clientId: 'test-client-id', clientSecret: 'test-client-secret' }
+    });
+
+    await sandbox.run('echo hello', './test-dir');
+
+    expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
+      Env: expect.arrayContaining([
+        'GOOGLE_CLIENT_ID=test-client-id',
+        'GOOGLE_CLIENT_SECRET=test-client-secret'
+      ]),
+    }));
+  });
+
   it('should wait for task and return logs', async () => {
     // Docker logs have an 8-byte header
     const header = Buffer.alloc(8);

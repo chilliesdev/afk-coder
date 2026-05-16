@@ -73,9 +73,11 @@ You can customize the daemon and sandbox behavior by editing `~/.config/af-coder
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `daemon.socketGroup` | `"afk-coder-users"` | The Unix group that will own the control socket. |
+| `daemon.socketPath` | `"/tmp/afk-coder.sock"` | The path to the daemon's control socket. |
 | `sandbox.image` | (latest stable) | The Docker image used for the execution sandbox. |
 | `sandbox.memory` | `2147483648` | Memory limit for the sandbox (bytes). |
 | `sandbox.nanoCpus` | `2000000000` | CPU limit for the sandbox (nano CPUs). |
+| `auth.redirectUri` | `"http://localhost:3000"` | The redirect URI for the OAuth 2.0 flow. |
 
 ---
 
@@ -85,8 +87,9 @@ You can customize the daemon and sandbox behavior by editing `~/.config/af-coder
 Create a `PRD.md` in your project directory, then generate a `tasks.md`:
 
 ```bash
-afk-coder init --dir /path/to/project
+afk-coder init --dir /path/to/project [--force]
 ```
+**Note:** The `init` command requires authentication. Please run `afk-coder login` first or set the `GEMINI_API_KEY` environment variable.
 
 ### 2. Authentication
 Log in to your Google account to enable Gemini Pro access:
@@ -96,8 +99,7 @@ afk-coder login
 ```
 
 ### 3. Start a Workflow
-Kick off the autonomous coding loop:
-
+Kick off the autonomous coding loop. If `--dir` is not specified, it will run in the current directory.
 ```bash
 afk-coder start my-feature --dir /path/to/project
 ```
@@ -116,12 +118,13 @@ afk-coder logs my-feature -f
 
 | Command | Description |
 | :--- | :--- |
-| `init [--dir <path>]` | Extracts tasks from `PRD.md` into `tasks.md` using a Docker sandbox. |
+| `init [--dir <path>] [--force]` | Extracts tasks from `PRD.md` into `tasks.md` using a Docker sandbox. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
 | `start <name> [--dir <path>]` | Hands over task execution to the background daemon. |
 | `list` | Lists all active and completed workflows. |
 | `logs <name> [--tail \| -f]` | Streams or outputs workflow execution logs. |
-| `kill <name>` | Terminates a running workflow and its sandbox. |
+| `kill <name>` | Terminates a running workflow. |
+| `remove <name>` | Cleans up a finished or failed workflow from the daemon. |
 
 ---
 

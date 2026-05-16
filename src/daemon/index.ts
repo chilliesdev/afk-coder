@@ -5,9 +5,14 @@ import { WorkflowManager } from './workflow-manager';
 import { DaemonResponse } from '../common/types';
 import { loadConfig } from '../common/config';
 
-const SOCKET_PATH = '/tmp/afk-coder.sock';
-const workflowManager = new WorkflowManager();
 const config = loadConfig();
+const workflowManager = new WorkflowManager();
+
+const SOCKET_PATH = config.daemon?.socketPath;
+
+if (!SOCKET_PATH) {
+  throw new Error('Socket path is not defined in the config. Exiting.');
+}
 
 if (fs.existsSync(SOCKET_PATH)) {
   fs.unlinkSync(SOCKET_PATH);
@@ -30,6 +35,10 @@ const server = net.createServer((socket) => {
         case 'kill':
           await workflowManager.killWorkflow(request.args.name);
           response = { success: true, message: `Killed ${request.args.name}` };
+          break;
+        case 'remove':
+          workflowManager.removeWorkflow(request.args.name);
+          response = { success: true, message: `Removed ${request.args.name}` };
           break;
         case 'logs':
           response = { success: true, data: workflowManager.getLogs(request.args.name, {
@@ -65,12 +74,14 @@ server.listen(SOCKET_PATH, () => {
           const uid = process.getuid ? process.getuid() : 0;
           fs.chownSync(SOCKET_PATH, uid, parseInt(gid));
           console.log(`Socket group ownership set to ${socketGroup} (${gid})`);
+        } else if (socketGroup === 'afk-coder-users') {
+          console.log(`Group ${socketGroup} not found. Skipping socket group ownership change (this is expected in development).`);
         } else {
-          console.log(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
+          console.warn(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
         }
       } catch (err: any) {
         if (socketGroup === 'afk-coder-users') {
-          console.log(`Group ${socketGroup} not found or could not be queried. Skipping socket group ownership change. (This is normal in development mode)`);
+          console.log(`Group ${socketGroup} not found or could not be queried. Skipping socket group ownership change.`);
         } else {
           console.warn(`Failed to set socket group ownership to ${socketGroup}: ${err.message}`);
         }

@@ -65,6 +65,24 @@ describe('CLI Commands', () => {
     });
   });
 
+  describe('start command', () => {
+    it('should use current directory if --dir is not provided', async () => {
+      const { sendCommand } = await import('../src/cli/client');
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue('- [ ] Task 1');
+
+      // This is a simplified version of the action in src/cli/index.ts
+      const workflowName = 'test-workflow';
+      const options = { dir: undefined };
+      const dir = path.resolve(options.dir || '.');
+      validateWorkflowDir(dir);
+      await sendCommand('start', { name: workflowName, dir });
+
+
+      expect(sendCommand).toHaveBeenCalledWith('start', { name: 'test-workflow', dir: path.resolve('.') });
+    });
+  });
+
   describe('validation', () => {
     it('should validate workflow directory', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);

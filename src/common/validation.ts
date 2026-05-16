@@ -7,7 +7,9 @@ export interface Task {
 }
 
 export function parseTasks(content: string): Task[] {
-  const lines = content.split('\n');
+  // Handle literal \n by replacing it with real newline
+  const normalizedContent = content.replace(/\\n/g, '\n');
+  const lines = normalizedContent.split('\n');
   return lines
     .filter(line => line.trim().match(/^- \[[ xX]\]/))
     .map(line => {

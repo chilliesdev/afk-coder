@@ -66,4 +66,39 @@ describe('WorkflowManager Integration', () => {
     expect(logs.content).toContain('"input":10,"output":20');
     expect(logs.content).toContain('mock prompt');
   }, 40000);
+
+  it('should allow restarting a workflow that is Done or Failed', async () => {
+    const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
+    mockSandbox.mockImplementation(() => {
+      return {
+        runTask: jest.fn().mockResolvedValue({
+          pid: 123,
+          prompt: 'mock prompt',
+          wait: async () => {
+            fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
+            return { exitCode: 0, logs: 'Done' };
+          },
+          stop: async () => {}
+        })
+      } as any;
+    });
+
+    workflowManager.startWorkflow('restart-test', testDir);
+    
+    // Wait for it to be Done
+    let attempts = 0;
+    while (workflowManager.listWorkflows().find(w => w.name === 'restart-test')?.status !== 'Done' && attempts < 100) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+
+    expect(workflowManager.listWorkflows().find(w => w.name === 'restart-test')?.status).toBe('Done');
+
+    // Attempt to start it again
+    fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1'); // Reset tasks
+    expect(() => workflowManager.startWorkflow('restart-test', testDir)).not.toThrow();
+    
+    const workflow = workflowManager.listWorkflows().find(w => w.name === 'restart-test');
+    expect(workflow?.status).toMatch(/^Running/);
+  }, 20000);
 });
