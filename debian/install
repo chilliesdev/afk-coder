@@ -1,0 +1,4 @@
+bin/afk-coder usr/local/bin
+bin/afk-coder-daemon usr/local/bin
+dist usr/local/lib/afk-coder
+afk-coder.service lib/systemd/system

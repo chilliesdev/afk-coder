@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group afk-coder >/dev/null; then
+        addgroup --system afk-coder
+    fi
+    if ! getent passwd afk-coder >/dev/null; then
+        adduser --system --ingroup afk-coder --no-create-home --home /var/lib/afk-coder --shell /bin/false afk-coder
+    fi
+    # Add to docker group to allow running containers
+    if getent group docker >/dev/null; then
+        adduser afk-coder docker
+    fi
+    
+    mkdir -p /var/lib/afk-coder
+    chown afk-coder:afk-coder /var/lib/afk-coder
+
+    systemctl daemon-reload || true
+    systemctl enable afk-coder.service || true
+fi
+
+#DEBHELPER#
+
+exit 0

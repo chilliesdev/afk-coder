@@ -1,0 +1,13 @@
+[Unit]
+Description=Gemini AFK Coding Daemon
+After=network.target docker.service
+
+[Service]
+ExecStart=/usr/local/bin/afk-coder-daemon
+Restart=always
+User=afk-coder
+Group=afk-coder
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

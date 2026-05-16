@@ -1,0 +1,14 @@
+Source: afk-coder
+Section: utils
+Priority: optional
+Maintainer: Gemini CLI Agent <agent@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+Homepage: https://github.com/example/afk-coder
+
+Package: afk-coder
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, nodejs, docker.io
+Description: Gemini AFK Coding Daemon
+ A background-managed, autonomous coding assistant tailored for Ubuntu servers.
+ Note: Requires 'gemini' CLI (npm install -g @google/gemini-cli) for 'init' command functionality.

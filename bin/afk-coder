@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+const path = require('path');
+const fs = require('fs');
+
+// Try to find dist in several locations
+const possiblePaths = [
+  path.join(__dirname, '../dist/cli/index.js'), // Development
+  '/usr/local/lib/afk-coder/dist/cli/index.js',  // Installed
+  '/usr/lib/afk-coder/dist/cli/index.js'         // Alternative installed
+];
+
+let found = false;
+for (const p of possiblePaths) {
+  if (fs.existsSync(p)) {
+    require(p);
+    found = true;
+    break;
+  }
+}
+
+if (!found) {
+  console.error("Could not find afk-coder distribution files.");
+  process.exit(1);
+}

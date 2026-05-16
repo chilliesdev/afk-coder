@@ -24,7 +24,7 @@ The **Gemini AFK Coding Daemon** is a background-managed, autonomous coding assi
 ### 3.2. Phase 2: Execution (AFK Loop)
 
 1. User initiates the workflow via the CLI `start` command.
-2. The daemon spins up a sandboxed environment (e.g., using `bubblewrap`, `Docker`, or `systemd-nspawn`) mapped to the implementation directory.
+2. The daemon spins up a sandboxed environment (e.g., using `Docker` or `systemd-nspawn`) mapped to the implementation directory.
 3. **The Loop:**
 * Parse `tasks.md` to find the first uncompleted task (`- [ ]`).
 * Construct the prompt: *"Pick the most priority task in the tasks.md, and focus only on that task, mark the task as done and end the session."*
@@ -43,8 +43,13 @@ The **Gemini AFK Coding Daemon** is a background-managed, autonomous coding assi
 
 The application must expose a main command-line interface (e.g., `afk-coder`).
 
+* **`afk-coder init [--dir <path>]`**
+* Automatically generates a `tasks.md` from a `PRD.md` in the specified directory.
+* Leverages Gemini to extract granular, actionable implementation tasks.
+
+
 * **`afk-coder login`**
-* Initiates the Google OAuth 2.0 flow (e.g., via a device code or browser-based PKCE flow).
+* Initiates the Google OAuth 2.0 flow (requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment variables to be set).
 * Exchanges the authorization code for access and refresh tokens.
 * Securely stores tokens for use by the background daemon.
 
@@ -96,7 +101,7 @@ The system will consist of three primary components:
 
 1. **The CLI Client:** A TypeScript/Node.js frontend that interacts with the user, parses arguments, and communicates with the Daemon.
 2. **The Service Daemon:** A `systemd`-managed Node.js process that queues workflows, manages state, monitors progress, handles Google OAuth 2.0 authentication, and exposes a Unix socket or local port for the CLI client to query.
-3. **The Execution Sandbox:** Ephemeral, isolated containers (e.g., using `bubblewrap` or `Docker`) spun up by the Daemon for each workflow.
+3. **The Execution Sandbox:** Ephemeral, isolated containers, using `Docker` spun up by the Daemon for each workflow.
 
 ### 5.1. Authentication & Authorization
 
@@ -132,4 +137,4 @@ To meet the requirement of functioning like any other Linux service without worr
 4. Automatically enables and starts the service (`systemctl enable --now afk-coder.service`).
 
 
-* **Dependencies:** The package manager will automatically pull required dependencies (e.g., `docker.io` or `bubblewrap`, `jq` for JSON parsing, etc.).
+* **Dependencies:** The package manager will automatically pull required dependencies (e.g., `docker.io`, `jq` for JSON parsing, etc.).
