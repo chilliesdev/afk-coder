@@ -6,12 +6,6 @@ echo "Building project..."
 npm install --no-audit --no-fund
 npm run build
 
-# Check for gemini CLI
-if ! command -v gemini &> /dev/null; then
-    echo "Warning: 'gemini' CLI not found. It is required for 'afk-coder init'."
-    echo "Ensure it is installed and in your PATH (e.g., npm install -g @google/gemini-cli)."
-fi
-
 # Create afk-coder user and groups if they don't exist
 if ! getent group afk-coder > /dev/null; then
     sudo groupadd afk-coder

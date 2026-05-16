@@ -11,4 +11,3 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, nodejs, docker.io
 Description: Gemini AFK Coding Daemon
  A background-managed, autonomous coding assistant tailored for Ubuntu servers.
- Note: Requires 'gemini' CLI (npm install -g @google/gemini-cli) for 'init' command functionality.

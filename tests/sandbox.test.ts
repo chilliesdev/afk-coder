@@ -37,11 +37,25 @@ describe('Sandbox', () => {
     sandbox = new Sandbox();
   });
 
-  it('should create and start a container with correct options', async () => {
+  it('should create and start a container with correct options for generalized run', async () => {
+    const result = await sandbox.run('echo hello', './test-dir');
+
+    expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
+      Cmd: ['bash', '-c', 'echo hello'],
+      HostConfig: expect.objectContaining({
+        Binds: [expect.stringContaining('test-dir:/app')],
+      }),
+    }));
+    expect(mockContainer.start).toHaveBeenCalled();
+    expect(result.pid).toBe(1234);
+  });
+
+  it('should create and start a container with correct options for runTask', async () => {
     const result = await sandbox.runTask('test-workflow', 'test task', './test-dir');
 
     expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
       Image: 'test-image',
+      Cmd: ['bash', '-c', expect.stringContaining('test task')],
       Env: expect.arrayContaining([
         'GOOGLE_ACCESS_TOKEN=test-access',
         'GOOGLE_REFRESH_TOKEN=test-refresh'

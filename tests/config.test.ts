@@ -28,7 +28,6 @@ describe('Config Management', () => {
       clientSecret: 'test-client-secret',
       scopes: ['test-scope'],
     },
-    geminiPath: 'test-gemini',
   };
 
   const mockTokens = {
@@ -46,7 +45,6 @@ describe('Config Management', () => {
       const config = loadConfig();
       expect(config.sandbox.image).toContain('gemini-cli/sandbox');
       expect(config.daemon?.socketGroup).toBe('afk-coder-users');
-      expect(config.geminiPath).toBe('gemini');
     });
 
     it('should return merged config if config file exists', () => {
@@ -56,7 +54,6 @@ describe('Config Management', () => {
       expect(config.sandbox.image).toBe('test-image');
       expect(config.daemon?.socketGroup).toBe('custom-group');
       expect(config.auth?.clientId).toBe('test-client-id');
-      expect(config.geminiPath).toBe('test-gemini');
     });
 
     it('should handle JSON parse errors by returning defaults', () => {

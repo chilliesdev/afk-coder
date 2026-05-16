@@ -9,7 +9,7 @@ The **Gemini AFK Coding Daemon** implementation is substantially complete and al
 | Requirement | ID | Status | Implementation Reference |
 | :--- | :--- | :--- | :--- |
 | **CLI Commands** | | | |
-| `afk-coder init` | 4.1.1 | Implemented | `src/cli/index.ts`: Generates `tasks.md` from `PRD.md` using `gemini` CLI. |
+| `afk-coder init` | 4.1.1 | Implemented | `src/cli/index.ts`: Generates `tasks.md` from `PRD.md` using a Docker sandbox. |
 | `afk-coder login` | 4.1.2 | Implemented | `src/cli/index.ts`: Google OAuth 2.0 flow with token storage. |
 | `afk-coder start` | 4.1.3 | Implemented | `src/cli/index.ts`: Sends start command to daemon via Unix socket. |
 | `afk-coder list` | 4.1.4 | Implemented | `src/cli/index.ts`: Displays workflow table from daemon state. |
@@ -39,15 +39,13 @@ The **Gemini AFK Coding Daemon** implementation is substantially complete and al
 
 ## 3. Discrepancies
 
-1.  **`init` Command Dependency:** The `afk-coder init` command requires the `gemini` CLI to be installed and available in the host's `PATH`. This is a hidden dependency that might not be met on all systems. While noted in `debian/control`, it would be more robust to run this inside a sandbox as well.
-2.  **`init` Authentication:** The `init` command does not currently leverage the OAuth tokens acquired via `afk-coder login`. If the local `gemini` CLI requires authentication, it might fail even if the user has "logged in" to `afk-coder`.
-3.  **Unix Socket Permissions:** The daemon sets socket permissions to `660` and changes group ownership to `afk-coder-users` by default. This allows users added to the `afk-coder-users` group to have CLI access without needing full root or `afk-coder` user privileges.
-4.  **Token Usage Regex:** The extraction of token usage from logs relies on multiple regex patterns in `WorkflowManager.ts`. While thorough, this is inherently brittle if the `gemini` CLI output format changes significantly.
+1.  **`init` Authentication:** The `init` command does not currently leverage the OAuth tokens acquired via `afk-coder login`. If the local `gemini` CLI requires authentication, it might fail even if the user has "logged in" to `afk-coder`.
+2.  **Unix Socket Permissions:** The daemon sets socket permissions to `660` and changes group ownership to `afk-coder-users` by default. This allows users added to the `afk-coder-users` group to have CLI access without needing full root or `afk-coder` user privileges.
+3.  **Token Usage Regex:** The extraction of token usage from logs relies on multiple regex patterns in `WorkflowManager.ts`. While thorough, this is inherently brittle if the `gemini` CLI output format changes significantly.
 
 ## 4. Recommendations
 
-1.  **Containerize `init`:** Refactor `afk-coder init` to run the task extraction inside a temporary Docker container, similar to how tasks are executed. This eliminates the host-side dependency on the `gemini` CLI.
-2. **Structured Model Output:** If possible, use a `--json` or similar flag with the `gemini` CLI to get structured token usage and status updates, rather than parsing stdout with regex.
+1. **Structured Model Output:** If possible, use a `--json` or similar flag with the `gemini` CLI to get structured token usage and status updates, rather than parsing stdout with regex.
 
 ## 5. Testing and Quality
 

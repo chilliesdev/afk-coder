@@ -20,7 +20,6 @@ export interface Config {
     clientSecret: string;
     scopes?: string[];
   };
-  geminiPath?: string;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -37,7 +36,6 @@ const DEFAULT_CONFIG: Config = {
     clientSecret: '',
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
   },
-  geminiPath: 'gemini',
 };
 
 export function ensureConfigDir() {

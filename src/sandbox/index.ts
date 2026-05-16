@@ -14,7 +14,13 @@ export class Sandbox {
     this.docker = new Docker();
   }
 
-  async runTask(workflowName: string, taskDescription: string, dir: string) {
+  /**
+   * Runs an arbitrary prompt inside a Docker container using the Gemini CLI.
+   * @param prompt The full command or prompt to execute.
+   * @param dir The directory to map to /app inside the container.
+   * @returns A handle to the running process, including its PID and methods to stop or wait for completion.
+   */
+  async run(prompt: string, dir: string) {
     await refreshToken();
     const tokens = loadTokens();
     const config = loadConfig();
@@ -26,8 +32,6 @@ export class Sandbox {
       if (tokens.access_token) env.push(`GOOGLE_ACCESS_TOKEN=${tokens.access_token}`);
       if (tokens.refresh_token) env.push(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
     }
-
-    const prompt = `gemini --yolo --prompt "Focus only on the following task: \\"${taskDescription}\\". Pick it from tasks.md, mark it as done by changing [ ] to [x], and end the session. Do not modify the task description text itself."`;
 
     const container = await this.docker.createContainer({
       Image: config.sandbox.image,
@@ -86,5 +90,17 @@ export class Sandbox {
         };
       }
     };
+  }
+
+  /**
+   * Runs a specific coding task inside the sandbox.
+   * @param workflowName The name of the workflow this task belongs to.
+   * @param taskDescription The description of the task to perform.
+   * @param dir The directory containing the project files (must include tasks.md).
+   * @returns A handle to the running task.
+   */
+  async runTask(workflowName: string, taskDescription: string, dir: string) {
+    const prompt = `gemini --yolo --prompt "Focus only on the following task: \\"${taskDescription}\\". Pick it from tasks.md, mark it as done by changing [ ] to [x], and end the session. Do not modify the task description text itself."`;
+    return this.run(prompt, dir);
   }
 }

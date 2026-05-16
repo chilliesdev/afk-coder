@@ -16,11 +16,9 @@ program
   .command('init')
   .description('Generate tasks.md from PRD.md')
   .option('--dir <path>', 'Directory containing PRD.md', '.')
-  .option('--gemini-path <path>', 'Path to gemini executable')
   .action(async (options) => {
-    const { loadConfig } = await import('../common/config');
-    const config = loadConfig();
-    const geminiPath = options.geminiPath || config.geminiPath || 'gemini';
+    const { Sandbox } = await import('../sandbox');
+    const sandbox = new Sandbox();
     
     const dir = path.resolve(options.dir);
     const prdPath = path.join(dir, 'PRD.md');
@@ -31,24 +29,39 @@ program
       return;
     }
 
-    console.log(`Generating tasks.md from ${prdPath}... using ${geminiPath}`);
+    console.log(`Generating tasks.md from ${prdPath} using Docker sandbox...`);
     try {
-      // Check if gemini is in PATH
-      try {
-        execSync(`${geminiPath} --version`, { stdio: 'ignore' });
-      } catch (e) {
-        console.error(`Error: "${geminiPath}" executable not found. Please install Gemini CLI or provide correct path.`);
-        return;
-      }
-
-      const prompt = 'Extract all implementation tasks from PRD.md and list them in tasks.md. Format each task as "- [ ] Task description". Ensure the tasks are granular and actionable. Only output the tasks.md content, no conversational text.';
-      const output = execSync(`${geminiPath} --yolo --prompt '${prompt}'`, { cwd: dir, encoding: 'utf8' });
+      const prompt = 'gemini --yolo --prompt "Extract all implementation tasks from PRD.md and list them in tasks.md. Format each task as \\"- [ ] Task description\\". Ensure the tasks are granular and actionable. Only output the tasks.md content, no conversational text."';
       
-      if (fs.existsSync(tasksPath)) {
-        console.log('Successfully generated tasks.md');
+      const run = await sandbox.run(prompt, dir);
+      const result = await run.wait();
+
+      if (result.exitCode === 0) {
+        if (fs.existsSync(tasksPath)) {
+          console.log('Successfully generated tasks.md');
+        } else {
+          // If gemini didn't write the file directly (e.g. it just outputted to stdout),
+          // we can try to use the logs, but ideally gemini --yolo with that prompt should write it if it's smart enough,
+          // OR we can just write it ourselves from logs if it's missing.
+          // However, gemini CLI usually writes files if instructed.
+          // Let's check if tasks.md was created in the mapped volume.
+          if (fs.existsSync(tasksPath)) {
+             console.log('Successfully generated tasks.md');
+          } else {
+             // Fallback: write stdout to tasks.md if it looks like task list
+             const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
+             if (lines.length > 0) {
+               fs.writeFileSync(tasksPath, lines.join('\n'));
+               console.log('Successfully generated tasks.md (from stdout)');
+             } else {
+               console.error('Failed to generate tasks.md: No tasks found in output');
+               console.log('Logs:', result.logs);
+             }
+          }
+        }
       } else {
-        fs.writeFileSync(tasksPath, output.trim());
-        console.log('Successfully generated tasks.md (from stdout)');
+        console.error(`Failed to generate tasks.md: Exit code ${result.exitCode}`);
+        console.error('Logs:', result.logs);
       }
     } catch (err: any) {
       console.error('Failed to generate tasks.md:', err.message);

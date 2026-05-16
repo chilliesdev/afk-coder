@@ -1,42 +1,51 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { validateWorkflowDir } from '../src/common/validation';
+import { Sandbox } from '../src/sandbox';
 
-// Mock child_process and fs
-jest.mock('child_process');
+// Mock Sandbox and fs
 jest.mock('fs');
+jest.mock('../src/sandbox');
 jest.mock('../src/cli/client', () => ({
   sendCommand: jest.fn()
 }));
 
 describe('CLI Commands', () => {
+  let mockSandbox: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSandbox = {
+      run: jest.fn().mockResolvedValue({
+        wait: jest.fn().mockResolvedValue({ exitCode: 0, logs: '- [ ] Task 1' })
+      })
+    };
+    (Sandbox as jest.Mock).mockImplementation(() => mockSandbox);
   });
 
   describe('init command', () => {
-    const mockTasksOutput = '- [ ] Task 1';
-
     it('should generate tasks.md if PRD.md exists', async () => {
       (fs.existsSync as jest.Mock).mockImplementation((p: string) => p.endsWith('PRD.md'));
-      (execSync as jest.Mock).mockReturnValue(mockTasksOutput);
-
+      
       const options = { dir: './test-dir' };
       const dir = path.resolve(options.dir);
       const prdPath = path.join(dir, 'PRD.md');
       const tasksPath = path.join(dir, 'tasks.md');
 
-      // Logic from src/cli/index.ts
+      // Simulating the action in src/cli/index.ts
+      const sandbox = new Sandbox();
       if (fs.existsSync(prdPath)) {
-        const output = execSync(`gemini --yolo --prompt '...'`, { cwd: dir, encoding: 'utf8' });
-        if (!fs.existsSync(tasksPath)) {
-          fs.writeFileSync(tasksPath, output.trim());
+        const run = await sandbox.run('gemini --yolo ...', dir);
+        const result = await run.wait();
+        if (result.exitCode === 0) {
+           if (!fs.existsSync(tasksPath)) {
+             fs.writeFileSync(tasksPath, result.logs.trim());
+           }
         }
       }
 
-      expect(execSync).toHaveBeenCalled();
-      expect(fs.writeFileSync).toHaveBeenCalledWith(tasksPath, mockTasksOutput);
+      expect(mockSandbox.run).toHaveBeenCalledWith(expect.stringContaining('gemini --yolo'), dir);
+      expect(fs.writeFileSync).toHaveBeenCalledWith(tasksPath, '- [ ] Task 1');
     });
 
     it('should error if PRD.md is missing', async () => {

@@ -116,7 +116,7 @@ afk-coder logs my-feature -f
 
 | Command | Description |
 | :--- | :--- |
-| `init [--dir <path>]` | Extracts tasks from `PRD.md` into `tasks.md`. |
+| `init [--dir <path>]` | Extracts tasks from `PRD.md` into `tasks.md` using a Docker sandbox. |
 | `login` | Performs Google OAuth 2.0 flow. |
 | `start <name> [--dir <path>]` | Hands over task execution to the background daemon. |
 | `list` | Lists all active and completed workflows. |
