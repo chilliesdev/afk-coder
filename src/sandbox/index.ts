@@ -33,8 +33,11 @@ export class Sandbox {
       if (tokens.refresh_token) env.push(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
     }
 
+    const image = config.sandbox.image;
+    await this.ensureImage(image);
+
     const container = await this.docker.createContainer({
-      Image: config.sandbox.image,
+      Image: image,
       Cmd: ['bash', '-c', prompt],
       Env: env,
       HostConfig: {
@@ -90,6 +93,35 @@ export class Sandbox {
         };
       }
     };
+  }
+
+  /**
+   * Ensures the Docker image is available locally, pulling it if necessary.
+   */
+  private async ensureImage(image: string) {
+    try {
+      await this.docker.getImage(image).inspect();
+    } catch (err: any) {
+      if (err.statusCode === 404) {
+        console.log(`Image ${image} not found locally. Pulling...`);
+        await new Promise((resolve, reject) => {
+          this.docker.pull(image, (err: any, stream: any) => {
+            if (err) return reject(err);
+            this.docker.modem.followProgress(stream, (err: any, res: any) => {
+              if (err) return reject(err);
+              resolve(res);
+            }, (event: any) => {
+              // Minimal logging to avoid spamming the console
+              if (event.status && !['Downloading', 'Extracting'].includes(event.status)) {
+                console.log(`Pulling ${image}: ${event.status}`);
+              }
+            });
+          });
+        });
+      } else {
+        throw err;
+      }
+    }
   }
 
   /**

@@ -66,10 +66,14 @@ server.listen(SOCKET_PATH, () => {
           fs.chownSync(SOCKET_PATH, uid, parseInt(gid));
           console.log(`Socket group ownership set to ${socketGroup} (${gid})`);
         } else {
-          console.warn(`Could not find GID for group: ${socketGroup}`);
+          console.log(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
         }
       } catch (err: any) {
-        console.warn(`Failed to set socket group ownership to ${socketGroup}: ${err.message}`);
+        if (socketGroup === 'afk-coder-users') {
+          console.log(`Group ${socketGroup} not found or could not be queried. Skipping socket group ownership change. (This is normal in development mode)`);
+        } else {
+          console.warn(`Failed to set socket group ownership to ${socketGroup}: ${err.message}`);
+        }
       }
     }
   } catch (err: any) {

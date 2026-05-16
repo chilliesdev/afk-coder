@@ -21,6 +21,9 @@ describe('Sandbox', () => {
     };
 
     (Docker.prototype.createContainer as jest.Mock).mockResolvedValue(mockContainer);
+    (Docker.prototype.getImage as jest.Mock).mockReturnValue({
+      inspect: jest.fn().mockResolvedValue({}),
+    });
     (config.loadConfig as jest.Mock).mockReturnValue({
       sandbox: {
         image: 'test-image',
