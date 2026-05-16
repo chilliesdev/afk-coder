@@ -240,7 +240,7 @@ export class WorkflowManager {
     }
     const logger = this.getOrCreateLogger(name, workflow.dir);
     logger.info('Workflow killed by user');
-    workflow.status = 'Done'; // This will stop the loop
+    workflow.status = 'Killed'; // This will stop the loop
     if (workflow.stopHandle) {
       await workflow.stopHandle();
       workflow.stopHandle = undefined;
@@ -253,7 +253,7 @@ export class WorkflowManager {
       throw new Error(`Workflow ${name} not found`);
     }
 
-    if (workflow.status !== 'Done' && !workflow.status.startsWith('Failed')) {
+    if (workflow.status !== 'Done' && !workflow.status.startsWith('Failed') && workflow.status !== 'Killed') {
       throw new Error(`Workflow ${name} is still running. Kill it first.`);
     }
 

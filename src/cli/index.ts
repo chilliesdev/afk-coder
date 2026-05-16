@@ -104,11 +104,11 @@ program
       saveConfig(config);
     }
 
-    const oAuth2Client = new OAuth2Client(
+    const oAuth2Client = new OAuth2Client({
       clientId,
       clientSecret,
-      config.auth?.redirectUri
-    );
+      redirectUri: config.auth?.redirectUri
+    });
 
     const authUrl = oAuth2Client.generateAuthUrl({
       access_type: 'offline',
@@ -137,9 +137,22 @@ program
         res.end('Authentication failed.');
         server.close();
       }
-    }).listen(3000);
+    });
 
-    console.log('Waiting for authorization...');
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('\n❌ Error: Port 3000 is already in use by another process.');
+        console.error('💡 Tip: Free up the port by running "npx kill-port 3000" and try logging in again.');
+        process.exit(1);
+      } else {
+        console.error('\n❌ Local server error:', err.message);
+        process.exit(1);
+      }
+    });
+
+    server.listen(3000, () => {
+      console.log('Waiting for authorization...');
+    });
   });
 
 

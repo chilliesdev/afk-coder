@@ -1,5 +1,7 @@
 import Docker from 'dockerode';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { loadTokens, refreshToken, loadConfig } from '../common/config';
 
 export interface SandboxOptions {
@@ -31,13 +33,27 @@ export class Sandbox {
       throw new Error('Authentication required. Please run "afk-coder login" or set the GEMINI_API_KEY environment variable.');
     }
     
-    const env = [
-      `GEMINI_API_KEY=${process.env['GEMINI_API_KEY'] || ''}`,
-    ];
+    const env: string[] = [];
+    const binds: string[] = [`${path.resolve(dir)}:/app`];
+    let tempDir: string | undefined;
 
-    if (tokens) {
-      if (tokens.access_token) env.push(`GOOGLE_ACCESS_TOKEN=${tokens.access_token}`);
-      if (tokens.refresh_token) env.push(`GOOGLE_REFRESH_TOKEN=${tokens.refresh_token}`);
+    if (tokens && tokens.access_token) {
+      // Create a temporary directory for the settings file
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'afk-coder-gemini-'));
+      const geminiSettingsDir = path.join(tempDir, '.gemini');
+      fs.mkdirSync(geminiSettingsDir, { recursive: true });
+      
+      const settings = {
+        selectedAuthType: 'gemini-api-key',
+        apiKey: tokens.access_token,
+      };
+      
+      fs.writeFileSync(path.join(geminiSettingsDir, 'settings.json'), JSON.stringify(settings));
+      
+      // Mount the settings directory into the container's root home
+      binds.push(`${geminiSettingsDir}:/root/.gemini`);
+    } else if (process.env.GEMINI_API_KEY) {
+      env.push(`GEMINI_API_KEY=${process.env.GEMINI_API_KEY}`);
     }
 
     const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
@@ -58,7 +74,7 @@ export class Sandbox {
       Cmd: ['bash', '-c', prompt],
       Env: env,
       HostConfig: {
-        Binds: [`${path.resolve(dir)}:/app`],
+        Binds: binds,
         Memory: config.sandbox.memory,
         NanoCpus: config.sandbox.nanoCpus,
         NetworkMode: 'host',
@@ -72,6 +88,12 @@ export class Sandbox {
     // Get the real PID of the process in the container
     const inspect = await container.inspect();
     const pid = inspect.State.Pid;
+
+    const cleanup = async () => {
+      if (tempDir) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    };
 
     return {
       pid,
@@ -87,6 +109,7 @@ export class Sandbox {
         } catch (e) {
           // Container might already be removed
         }
+        await cleanup();
       },
       wait: async () => {
         const result = await container.wait();
@@ -104,6 +127,7 @@ export class Sandbox {
         } catch (e) {
           // Container might already be removed by stop()
         }
+        await cleanup();
         return {
           exitCode: result.StatusCode,
           logs: logs,
