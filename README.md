@@ -68,7 +68,17 @@ sudo systemctl start afk-coder
 
 ## ⚙️ Configuration
 
-You can customize the daemon and sandbox behavior by editing `~/.config/af-coder/config.json`.
+You can configure `afk-coder` using environment variables or a configuration file.
+
+### Environment Variables
+For secure credentials management, you can provide your Google Cloud OAuth credentials via environment variables. Create a `.env` file by copying the example:
+```bash
+cp .env.example .env
+```
+Fill in your `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the `.env` file. These values take precedence over the configuration file.
+
+### Configuration File
+You can customize the daemon and sandbox behavior by editing `~/.config/afk-coder/config.json`.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
@@ -92,11 +102,13 @@ afk-coder init --dir /path/to/project [--force]
 **Note:** The `init` command requires authentication. Please run `afk-coder login` first or set the `GEMINI_API_KEY` environment variable.
 
 ### 2. Authentication
-Log in to your Google account to enable Gemini Pro access:
+Log in to your Google account to enable Gemini Pro access. Ensure your OAuth credentials are set via the `.env` file or configuration file before logging in:
 
 ```bash
 afk-coder login
 ```
+
+**Troubleshooting:** If you encounter an `EADDRINUSE` error (port 3000 is occupied), free the port by running `npx kill-port 3000` and try logging in again.
 
 ### 3. Start a Workflow
 Kick off the autonomous coding loop. If `--dir` is not specified, it will run in the current directory.

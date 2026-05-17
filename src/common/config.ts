@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import 'dotenv/config';
 
-export const CONFIG_DIR = path.join(os.homedir(), '.config', 'af-coder');
+export const CONFIG_DIR = path.join(os.homedir(), '.config', 'afk-coder');
 export const TOKENS_PATH = path.join(CONFIG_DIR, 'tokens.json');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 
