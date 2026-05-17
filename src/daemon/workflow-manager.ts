@@ -57,6 +57,8 @@ export class WorkflowManager {
       uptime: Date.now(),
       progress: `${tasks.length - pendingTasks.length}/${tasks.length}`,
       status: 'Running',
+      tokenUsage: { input: 0, output: 0, total: 0 },
+      recentTasks: [],
     };
     this.workflows.set(name, workflow);
 
@@ -90,6 +92,7 @@ export class WorkflowManager {
 
       const nextTask = pendingTasks[0]!;
       workflow.status = `Running: ${nextTask.description}`;
+      workflow.currentTask = nextTask.description;
 
       let retries = 0;
       const maxRetries = 3;
@@ -126,18 +129,27 @@ export class WorkflowManager {
               /(?:Tokens|Usage):?\s*(?:input:?\s*)?(\d+)\s+(?:input|prompt)?(?:s)?,?\s*(?:output:?\s*)?(\d+)\s*(?:output|completion)?(?:s)?/i
             ];
 
-            let tokenUsage;
+            let taskTokenUsage = { input: 0, output: 0, total: 0 };
+
             for (const pattern of tokenPatterns) {
               const match = result.logs.match(pattern);
               if (match) {
-                tokenUsage = {
-                  input: parseInt(match[1]),
-                  output: parseInt(match[2]),
-                  total: parseInt(match[1]) + parseInt(match[2])
-                };
+                const input = parseInt(match[1]);
+                const output = parseInt(match[2]);
+                taskTokenUsage = { input, output, total: input + output };
+                workflow.tokenUsage.input += input;
+                workflow.tokenUsage.output += output;
+                workflow.tokenUsage.total += (input + output);
                 break;
               }
             }
+
+            // Update task tracking
+            workflow.recentTasks.unshift(nextTask.description);
+            if (workflow.recentTasks.length > 5) {
+              workflow.recentTasks.pop();
+            }
+            workflow.currentTask = undefined;
 
             // Check if tasks.md was updated
             const updatedTasksContent = fs.readFileSync(tasksPath, 'utf-8');
@@ -152,7 +164,8 @@ export class WorkflowManager {
               task: nextTask.description, 
               exitCode: result.exitCode,
               output: result.logs,
-              tokenUsage
+              tokenUsage: taskTokenUsage,
+              workflowTokenUsage: workflow.tokenUsage
             });
             success = true;
           } else {
@@ -231,6 +244,15 @@ export class WorkflowManager {
       ...w,
       uptime: Date.now() - w.uptime, // Return uptime in ms
     }));
+  }
+
+  getWorkflow(name: string): Workflow | undefined {
+    const w = this.workflows.get(name);
+    if (!w) return undefined;
+    return {
+      ...w,
+      uptime: Date.now() - w.uptime,
+    };
   }
 
   async killWorkflow(name: string) {

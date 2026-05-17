@@ -32,6 +32,14 @@ const server = net.createServer((socket) => {
         case 'list':
           response = { success: true, data: workflowManager.listWorkflows() };
           break;
+        case 'status':
+          const wf = workflowManager.getWorkflow(request.args.name);
+          if (wf) {
+            response = { success: true, data: wf };
+          } else {
+            response = { success: false, message: `Workflow ${request.args.name} not found` };
+          }
+          break;
         case 'kill':
           await workflowManager.killWorkflow(request.args.name);
           response = { success: true, message: `Killed ${request.args.name}` };

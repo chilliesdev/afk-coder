@@ -1,2 +1,0 @@
-- [ ] Task 1: Hello World
-- [ ] Task 2: Goodbye World

@@ -304,6 +304,64 @@ program
   });
 
 program
+  .command('status <workflow_name>')
+  .description('Show detailed status of a workflow')
+  .action(async (workflowName) => {
+    try {
+      const response = await sendCommand('status', { name: workflowName });
+      if (response.success) {
+        const w = response.data;
+        const s = Math.floor(w.uptime / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const rs = s % 60;
+        const uptimeStr = `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`;
+
+        const colors = {
+          reset: '\x1b[0m',
+          bold: '\x1b[1m',
+          green: '\x1b[32m',
+          yellow: '\x1b[33m',
+          red: '\x1b[31m',
+          cyan: '\x1b[36m',
+        };
+
+        let statusColor = colors.reset;
+        if (w.status === 'Done') statusColor = colors.green;
+        else if (w.status.startsWith('Running')) statusColor = colors.yellow;
+        else if (w.status.startsWith('Failed') || w.status === 'Killed') statusColor = colors.red;
+
+        console.log(`${colors.bold}Workflow:${colors.reset} ${colors.cyan}${w.name}${colors.reset}`);
+        console.log('----------------------------------------');
+        console.log(`${colors.bold}Status:${colors.reset}    ${statusColor}${w.status}${colors.reset}`);
+        console.log(`${colors.bold}PID:${colors.reset}       ${w.pid || 'N/A'}`);
+        console.log(`${colors.bold}Uptime:${colors.reset}    ${uptimeStr}`);
+        console.log(`${colors.bold}Directory:${colors.reset} ${w.dir}`);
+        console.log(`${colors.bold}Progress:${colors.reset}  ${w.progress}`);
+        console.log('');
+        console.log(`${colors.bold}Current Task:${colors.reset}`);
+        console.log(`  ${w.currentTask || 'None'}`);
+        console.log('');
+        console.log(`${colors.bold}Recent Tasks:${colors.reset}`);
+        if (w.recentTasks && w.recentTasks.length > 0) {
+          w.recentTasks.forEach((task: string) => console.log(`  - ${task}`));
+        } else {
+          console.log('  None');
+        }
+        console.log('');
+        console.log(`${colors.bold}Token Usage:${colors.reset}`);
+        console.log(`  Input:  ${w.tokenUsage.input.toLocaleString()}`);
+        console.log(`  Output: ${w.tokenUsage.output.toLocaleString()}`);
+        console.log(`  Total:  ${w.tokenUsage.total.toLocaleString()}`);
+      } else {
+        console.error(`Failed to get status: ${response.message}`);
+      }
+    } catch (err: any) {
+      console.error(err.message);
+    }
+  });
+
+program
   .command('kill <workflow_name>')
   .description('Terminate a workflow')
   .action(async (workflowName) => {

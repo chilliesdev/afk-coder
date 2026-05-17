@@ -2,15 +2,15 @@
   "name": "afk-coder",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/cli/index.js",
+  "main": "dist/src/cli/index.js",
   "bin": {
     "afk-coder": "bin/afk-coder",
     "afk-coder-daemon": "bin/afk-coder-daemon"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/cli/index.js",
-    "daemon": "node dist/daemon/index.js",
+    "start": "node dist/src/cli/index.js",
+    "daemon": "node dist/src/daemon/index.js",
     "test": "jest"
   },
   "keywords": [],

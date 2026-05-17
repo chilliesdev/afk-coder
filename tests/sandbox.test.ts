@@ -8,9 +8,14 @@ jest.mock('../src/common/config');
 describe('Sandbox', () => {
   let sandbox: Sandbox;
   let mockContainer: any;
+  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    originalEnv = { ...process.env };
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+
     mockContainer = {
       start: jest.fn().mockResolvedValue({}),
       inspect: jest.fn().mockResolvedValue({ State: { Pid: 1234 } }),
@@ -38,6 +43,10 @@ describe('Sandbox', () => {
     (config.refreshToken as jest.Mock).mockResolvedValue({});
 
     sandbox = new Sandbox();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   it('should create and start a container with correct options for generalized run', async () => {

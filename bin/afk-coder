@@ -6,8 +6,8 @@ const fs = require('fs');
 const possiblePaths = [
   path.join(__dirname, '../dist/src/cli/index.js'), // Development (nested)
   path.join(__dirname, '../dist/cli/index.js'),     // Development
-  '/usr/local/lib/afk-coder/dist/cli/index.js',     // Installed
-  '/usr/lib/afk-coder/dist/cli/index.js'            // Alternative installed
+  '/usr/local/lib/afk-coder/dist/src/cli/index.js', // Installed
+  '/usr/lib/afk-coder/dist/src/cli/index.js'        // Alternative installed
 ];
 
 let found = false;

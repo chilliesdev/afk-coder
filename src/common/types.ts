@@ -1,3 +1,9 @@
+export interface TokenUsage {
+  input: number;
+  output: number;
+  total: number;
+}
+
 export interface Workflow {
   name: string;
   pid?: number;
@@ -5,6 +11,9 @@ export interface Workflow {
   progress: string; // e.g., "4/10"
   dir: string;
   status: string;
+  tokenUsage: TokenUsage;
+  currentTask?: string;
+  recentTasks: string[];
 }
 
 export interface DaemonResponse<T = any> {
