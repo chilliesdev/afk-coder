@@ -20,7 +20,7 @@ program
   .action(async (options) => {
     const { Sandbox } = await import('../sandbox');
     const sandbox = new Sandbox();
-    
+
     const dir = path.resolve(options.dir);
     const prdPath = path.join(dir, 'PRD.md');
     const tasksPath = path.join(dir, 'tasks.md');
@@ -38,7 +38,7 @@ program
     console.log(`Generating tasks.md from ${prdPath} using Docker sandbox...`);
     try {
       const prompt = 'gemini --yolo --prompt "Extract all implementation tasks from PRD.md and list them in tasks.md. Format each task as \\"- [ ] Task description\\". Ensure the tasks are granular and actionable. Only output the tasks.md content, no conversational text."';
-      
+
       const run = await sandbox.run(prompt, dir);
       const result = await run.wait();
 
@@ -52,17 +52,17 @@ program
           // However, gemini CLI usually writes files if instructed.
           // Let's check if tasks.md was created in the mapped volume.
           if (fs.existsSync(tasksPath)) {
-             console.log('Successfully generated tasks.md');
+            console.log('Successfully generated tasks.md');
           } else {
-             // Fallback: write stdout to tasks.md if it looks like task list
-             const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
-             if (lines.length > 0) {
-               fs.writeFileSync(tasksPath, lines.join('\n'));
-               console.log('Successfully generated tasks.md (from stdout)');
-             } else {
-               console.error('Failed to generate tasks.md: No tasks found in output');
-               console.log('Logs:', result.logs);
-             }
+            // Fallback: write stdout to tasks.md if it looks like task list
+            const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
+            if (lines.length > 0) {
+              fs.writeFileSync(tasksPath, lines.join('\n'));
+              console.log('Successfully generated tasks.md (from stdout)');
+            } else {
+              console.error('Failed to generate tasks.md: No tasks found in output');
+              console.log('Logs:', result.logs);
+            }
           }
         }
       } else {
@@ -82,6 +82,7 @@ program
     const { saveTokens, loadConfig, saveConfig } = await import('../common/config');
     const http = await import('http');
     const url = await import('url');
+    const readline = await import('readline');
 
     const config = loadConfig();
     const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
@@ -96,10 +97,10 @@ program
 
     // Save credentials to config for daemon use if provided via env
     if (process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_SECRET) {
-      config.auth = { 
-        ...config.auth, 
-        clientId: clientId, 
-        clientSecret: clientSecret 
+      config.auth = {
+        ...config.auth,
+        clientId: clientId,
+        clientSecret: clientSecret
       };
       saveConfig(config);
     }
@@ -117,29 +118,66 @@ program
 
     console.log('Authorize this app by visiting this url:', authUrl);
 
+    let isFinished = false;
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    const finishLogin = async (code: string) => {
+      if (isFinished) return;
+      isFinished = true;
+      rl.close();
+      server.close();
+
+      try {
+        const { tokens } = await oAuth2Client.getToken(code);
+        oAuth2Client.setCredentials(tokens);
+        saveTokens(tokens);
+        console.log('Login successful! Tokens saved.');
+      } catch (err: any) {
+        console.error('Error retrieving access token:', err.message);
+      }
+    };
+
     const server = http.createServer(async (req, res) => {
       try {
-        if (req.url!.indexOf('/?code=') !== -1) {
-          const qs = new url.URL(req.url!, 'http://localhost:3000').searchParams;
-          const code = qs.get('code');
-          res.end('Authentication successful! Please return to the console.');
-          server.close();
+        const reqUrl = new url.URL(req.url!, 'http://localhost:3000');
+        const code = reqUrl.searchParams.get('code');
+        const error = reqUrl.searchParams.get('error');
 
-          if (code) {
-            const { tokens } = await oAuth2Client.getToken(code);
-            oAuth2Client.setCredentials(tokens);
-            saveTokens(tokens);
-            console.log('Login successful! Tokens saved.');
+        if (code) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<h1>Authentication successful!</h1><p>Please return to the console.</p><script>window.close();</script>');
+          await finishLogin(code);
+        } else if (error) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end(`<h1>Authentication failed!</h1><p>Error: ${error}</p>`);
+          if (!isFinished) {
+            isFinished = true;
+            rl.close();
+            server.close();
           }
+        } else {
+          // Handle favicon.ico and any other requests by immediately returning 404
+          // to prevent the browser from hanging.
+          res.writeHead(404);
+          res.end();
         }
       } catch (err: any) {
         console.error('Error retrieving access token', err.message);
+        res.writeHead(500);
         res.end('Authentication failed.');
-        server.close();
+        if (!isFinished) {
+          isFinished = true;
+          rl.close();
+          server.close();
+        }
       }
     });
 
     server.on('error', (err: any) => {
+      rl.close();
       if (err.code === 'EADDRINUSE') {
         console.error('\n❌ Error: Port 3000 is already in use by another process.');
         console.error('💡 Tip: Free up the port by running "npx kill-port 3000" and try logging in again.');
@@ -152,6 +190,49 @@ program
 
     server.listen(3000, () => {
       console.log('Waiting for authorization...');
+      rl.question('\nIf running on a remote server, paste the redirect URL here:\n> ', async (input) => {
+        if (isFinished) return;
+        const trimmed = input.trim();
+        if (!trimmed) {
+          if (!isFinished) {
+            isFinished = true;
+            rl.close();
+            server.close();
+          }
+          return;
+        }
+
+        try {
+          let code: string | null = null;
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            const parsedUrl = new url.URL(trimmed);
+            code = parsedUrl.searchParams.get('code');
+          } else if (trimmed.includes('?code=')) {
+            const parsedUrl = new url.URL('http://' + trimmed);
+            code = parsedUrl.searchParams.get('code');
+          } else {
+            code = trimmed;
+          }
+
+          if (code) {
+            await finishLogin(code);
+          } else {
+            console.error('Could not extract authorization code from input.');
+            if (!isFinished) {
+              isFinished = true;
+              rl.close();
+              server.close();
+            }
+          }
+        } catch (err: any) {
+          console.error('Invalid URL or code input:', err.message);
+          if (!isFinished) {
+            isFinished = true;
+            rl.close();
+            server.close();
+          }
+        }
+      });
     });
   });
 
@@ -163,7 +244,7 @@ program
   .action(async (workflowName, options) => {
     try {
       const dir = path.resolve(options.dir || '.');
-      
+
       // Validate locally before sending to daemon
       try {
         validateWorkflowDir(dir);
@@ -251,21 +332,21 @@ program
       if (options.follow) {
         let currentOffset: number | undefined = undefined;
         console.log(`Following logs for ${workflowName}... (Ctrl+C to stop)`);
-        
+
         // Initial fetch with tail
-        const initialResponse = await sendCommand('logs', { 
-          name: workflowName, 
-          tail: options.tail || 20 
+        const initialResponse = await sendCommand('logs', {
+          name: workflowName,
+          tail: options.tail || 20
         });
-        
+
         if (initialResponse.success) {
           process.stdout.write(initialResponse.data.content);
           currentOffset = initialResponse.data.nextOffset;
         }
 
         while (true) {
-          const response = await sendCommand('logs', { 
-            name: workflowName, 
+          const response = await sendCommand('logs', {
+            name: workflowName,
             offset: currentOffset
           });
           if (response.success) {
