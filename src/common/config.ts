@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import 'dotenv/config';
 
 export const CONFIG_DIR = path.join(os.homedir(), '.config', 'af-coder');
 export const TOKENS_PATH = path.join(CONFIG_DIR, 'tokens.json');
@@ -35,12 +36,13 @@ const DEFAULT_CONFIG: Config = {
     socketPath: '/tmp/afk-coder.sock',
   },
   auth: {
-    clientId: '',
-    clientSecret: '',
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     redirectUri: 'http://localhost:3000',
   },
 };
+
 
 export function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) {
