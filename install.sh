@@ -24,6 +24,12 @@ if getent group docker > /dev/null; then
     sudo usermod -aG docker afk-coder
 fi
 
+# Add afk-coder to the invoking user's group to allow workspace access
+if [ -n "$SUDO_USER" ]; then
+    sudo usermod -aG "$SUDO_USER" afk-coder
+    echo "Added afk-coder to the $SUDO_USER group for workspace access."
+fi
+
 # Create directories
 sudo mkdir -p /usr/local/lib/afk-coder
 sudo cp -r dist /usr/local/lib/afk-coder/

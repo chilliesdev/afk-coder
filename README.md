@@ -59,6 +59,11 @@ sudo usermod -aG afk-coder-users $USER
 # Log out and back in for changes to take effect
 ```
 
+**Workspace Access:** The daemon runs as the `afk-coder` user. To allow it to read and write to projects inside your home directory, the installation script automatically adds the `afk-coder` user to your personal user group. If you install it manually or for a different user, you may need to run:
+```bash
+sudo usermod -aG $USER afk-coder
+```
+
 Finally, start the daemon:
 ```bash
 sudo systemctl start afk-coder
