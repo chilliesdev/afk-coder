@@ -135,8 +135,10 @@ program
         oAuth2Client.setCredentials(tokens);
         saveTokens(tokens);
         console.log('Login successful! Tokens saved.');
+        process.exit(0);
       } catch (err: any) {
         console.error('Error retrieving access token:', err.message);
+        process.exit(1);
       }
     };
 
@@ -157,6 +159,7 @@ program
             isFinished = true;
             rl.close();
             server.close();
+            process.exit(1);
           }
         } else {
           // Handle favicon.ico and any other requests by immediately returning 404
@@ -172,6 +175,7 @@ program
           isFinished = true;
           rl.close();
           server.close();
+          process.exit(1);
         }
       }
     });
@@ -198,6 +202,7 @@ program
             isFinished = true;
             rl.close();
             server.close();
+            process.exit(0);
           }
           return;
         }
@@ -222,6 +227,7 @@ program
               isFinished = true;
               rl.close();
               server.close();
+              process.exit(1);
             }
           }
         } catch (err: any) {
@@ -230,6 +236,7 @@ program
             isFinished = true;
             rl.close();
             server.close();
+            process.exit(1);
           }
         }
       });

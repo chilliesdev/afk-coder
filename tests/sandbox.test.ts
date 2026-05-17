@@ -46,7 +46,7 @@ describe('Sandbox', () => {
     expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
       Cmd: ['bash', '-c', 'echo hello'],
       HostConfig: expect.objectContaining({
-        Binds: [expect.stringContaining('test-dir:/app')],
+        Binds: expect.arrayContaining([expect.stringContaining('test-dir:/app')]),
       }),
     }));
     expect(mockContainer.start).toHaveBeenCalled();
@@ -59,11 +59,11 @@ describe('Sandbox', () => {
     expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
       Image: 'test-image',
       Cmd: ['bash', '-c', expect.stringContaining('test task')],
-      Env: expect.arrayContaining([
-        'GOOGLE_ACCESS_TOKEN=test-access',
-        'GOOGLE_REFRESH_TOKEN=test-refresh'
-      ]),
       HostConfig: expect.objectContaining({
+        Binds: expect.arrayContaining([
+          expect.stringContaining('test-dir:/app'),
+          expect.stringContaining('/root/.gemini')
+        ]),
         Memory: 1024,
         NanoCpus: 1000000000,
       }),
