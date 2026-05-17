@@ -2,7 +2,7 @@ import Docker from 'dockerode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { loadTokens, refreshToken, loadConfig } from '../common/config';
+import { loadTokens, refreshToken, loadConfig, TOKENS_PATH } from '../common/config';
 
 export interface SandboxOptions {
   dir: string;
@@ -44,11 +44,18 @@ export class Sandbox {
       fs.mkdirSync(geminiSettingsDir, { recursive: true });
       
       const settings = {
-        selectedAuthType: 'gemini-api-key',
-        apiKey: tokens.access_token,
+        security: {
+          auth: {
+            selectedType: 'oauth-personal'
+          }
+        }
       };
       
       fs.writeFileSync(path.join(geminiSettingsDir, 'settings.json'), JSON.stringify(settings));
+      
+      if (fs.existsSync(TOKENS_PATH)) {
+        fs.copyFileSync(TOKENS_PATH, path.join(geminiSettingsDir, 'oauth_creds.json'));
+      }
       
       // Mount the settings directory into the container's root home
       binds.push(`${geminiSettingsDir}:/root/.gemini`);
