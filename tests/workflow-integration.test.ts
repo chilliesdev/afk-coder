@@ -62,7 +62,7 @@ describe('WorkflowManager Integration', () => {
     expect(workflow.progress).toBe('1/1');
     
     const logs = workflowManager.getLogs('test-workflow');
-    expect(logs.content).toContain('Task completed successfully');
+    expect(logs.content).toContain('Tasks completed successfully');
     expect(logs.content).toContain('"input":10,"output":20');
     expect(logs.content).toContain('mock prompt');
   }, 40000);

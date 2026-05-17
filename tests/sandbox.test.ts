@@ -63,11 +63,11 @@ describe('Sandbox', () => {
   });
 
   it('should create and start a container with correct options for runTask', async () => {
-    const result = await sandbox.runTask('test-workflow', 'test task', './test-dir');
+    const result = await sandbox.runTask('test-workflow', './test-dir');
 
     expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
       Image: 'test-image',
-      Cmd: ['bash', '-c', expect.stringContaining('test task')],
+      Cmd: ['bash', '-c', expect.stringContaining('highest priority uncompleted task')],
       HostConfig: expect.objectContaining({
         Binds: expect.arrayContaining([
           expect.stringContaining('test-dir:/app'),
@@ -106,7 +106,7 @@ describe('Sandbox', () => {
     
     mockContainer.logs.mockResolvedValue(Buffer.concat([header, payload]));
 
-    const task = await sandbox.runTask('test-workflow', 'test task', './test-dir');
+    const task = await sandbox.runTask('test-workflow', './test-dir');
     const result = await task.wait();
 
     expect(result.exitCode).toBe(0);
@@ -115,7 +115,7 @@ describe('Sandbox', () => {
   });
 
   it('should handle stop', async () => {
-    const task = await sandbox.runTask('test-workflow', 'test task', './test-dir');
+    const task = await sandbox.runTask('test-workflow', './test-dir');
     await task.stop();
     expect(mockContainer.kill).toHaveBeenCalled();
     expect(mockContainer.remove).toHaveBeenCalled();

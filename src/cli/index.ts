@@ -37,7 +37,7 @@ program
 
     console.log(`Generating tasks.md from ${prdPath} using Docker sandbox...`);
     try {
-      const prompt = 'gemini --yolo --prompt "Extract all implementation tasks from PRD.md and list them in tasks.md. Format each task as \\"- [ ] Task description\\". Ensure the tasks are granular and actionable. Only output the tasks.md content, no conversational text."';
+      const prompt = 'gemini --yolo --prompt "Read the PRD.md file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \\"- [ ] Task description\\". Do not output the tasks to the console; you must write them directly to the tasks.md file."';
 
       const run = await sandbox.run(prompt, dir);
       const result = await run.wait();

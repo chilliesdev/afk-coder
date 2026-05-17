@@ -90,9 +90,8 @@ export class WorkflowManager {
         break;
       }
 
-      const nextTask = pendingTasks[0]!;
-      workflow.status = `Running: ${nextTask.description}`;
-      workflow.currentTask = nextTask.description;
+      workflow.status = `Running: Autonomous Agent Loop`;
+      workflow.currentTask = 'Autonomous Task Selection';
 
       let retries = 0;
       const maxRetries = 3;
@@ -100,12 +99,11 @@ export class WorkflowManager {
 
       while (retries <= maxRetries && !success) {
         try {
-          const run = await this.sandbox.runTask(workflow.name, nextTask.description, workflow.dir);
+          const run = await this.sandbox.runTask(workflow.name, workflow.dir);
           workflow.pid = run.pid;
           workflow.stopHandle = run.stop;
           
-          logger.info('Running task', { 
-            task: nextTask.description,
+          logger.info('Running agent loop', { 
             prompt: run.prompt 
           });
 
@@ -144,24 +142,28 @@ export class WorkflowManager {
               }
             }
 
-            // Update task tracking
-            workflow.recentTasks.unshift(nextTask.description);
-            if (workflow.recentTasks.length > 5) {
-              workflow.recentTasks.pop();
-            }
-            workflow.currentTask = undefined;
-
             // Check if tasks.md was updated
             const updatedTasksContent = fs.readFileSync(tasksPath, 'utf-8');
             const updatedTasks = parseTasks(updatedTasksContent);
-            const stillPending = updatedTasks.find(t => t.description === nextTask.description && !t.completed);
+            const postPendingTasks = updatedTasks.filter(t => !t.completed);
             
-            if (stillPending) {
-              throw new Error(`Task was not marked as completed in tasks.md`);
+            const newlyCompletedTasks = pendingTasks.filter(pre => !postPendingTasks.find(post => post.description === pre.description));
+            
+            if (newlyCompletedTasks.length === 0) {
+              throw new Error(`No tasks were marked as completed in tasks.md`);
             }
 
-            logger.info('Task completed successfully', { 
-              task: nextTask.description, 
+            // Update task tracking
+            newlyCompletedTasks.forEach(t => {
+              workflow.recentTasks.unshift(t.description);
+            });
+            if (workflow.recentTasks.length > 5) {
+              workflow.recentTasks.length = 5;
+            }
+            workflow.currentTask = undefined;
+
+            logger.info('Tasks completed successfully', { 
+              completedTasks: newlyCompletedTasks.map(t => t.description), 
               exitCode: result.exitCode,
               output: result.logs,
               tokenUsage: taskTokenUsage,
@@ -180,20 +182,17 @@ export class WorkflowManager {
               if (isQuotaError) {
                 delay = Math.max(delay, 60000); // Wait at least 60s for quota errors
                 logger.warn('Gemini API quota exceeded, waiting longer...', {
-                  task: nextTask.description,
                   attempt: retries,
                   nextRetryIn: `${delay / 1000}s`
                 });
               } else if (isSafetyError) {
                 logger.error('Task blocked by safety filters', {
-                  task: nextTask.description,
                   output: result.logs
                 });
                 workflow.status = 'Failed: Safety Block';
                 break;
               } else {
-                logger.warn('Task failed, retrying...', { 
-                  task: nextTask.description, 
+                logger.warn('Agent loop failed, retrying...', { 
                   exitCode: result.exitCode, 
                   attempt: retries,
                   nextRetryIn: `${delay / 1000}s`,
@@ -203,8 +202,7 @@ export class WorkflowManager {
               
               await new Promise(resolve => setTimeout(resolve, delay));
             } else {
-              logger.error('Task failed after max retries', { 
-                task: nextTask.description, 
+              logger.error('Agent loop failed after max retries', { 
                 exitCode: result.exitCode,
                 output: result.logs
               });
@@ -217,7 +215,6 @@ export class WorkflowManager {
           if (retries <= maxRetries) {
             const delay = Math.pow(2, retries) * 5000;
             logger.error('Sandbox error, retrying...', { 
-              task: nextTask.description, 
               error: err.message,
               attempt: retries,
               nextRetryIn: `${delay / 1000}s`
@@ -225,7 +222,6 @@ export class WorkflowManager {
             await new Promise(resolve => setTimeout(resolve, delay));
           } else {
             logger.error('Sandbox error after max retries', { 
-              task: nextTask.description, 
               error: err.message 
             });
             throw err;

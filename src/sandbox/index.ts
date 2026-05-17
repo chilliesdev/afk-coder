@@ -181,14 +181,13 @@ export class Sandbox {
   }
 
   /**
-   * Runs a specific coding task inside the sandbox.
+   * Runs an autonomous task selection loop inside the sandbox.
    * @param workflowName The name of the workflow this task belongs to.
-   * @param taskDescription The description of the task to perform.
    * @param dir The directory containing the project files (must include tasks.md).
    * @returns A handle to the running task.
    */
-  async runTask(workflowName: string, taskDescription: string, dir: string) {
-    const prompt = `gemini --yolo --prompt "Focus only on the following task: \\"${taskDescription}\\". Pick it from tasks.md, mark it as done by changing [ ] to [x], and end the session. Do not modify the task description text itself."`;
+  async runTask(workflowName: string, dir: string) {
+    const prompt = `gemini --yolo --prompt "Open tasks.md and identify the highest priority uncompleted task (marked with '- [ ]'). Your objective is to implement the necessary code for this task. Explore the codebase, write the code, and thoroughly verify your changes. Once completed and verified, open tasks.md again and mark ONLY that specific task as done by changing '- [ ]' to '- [x]'. Do not work on multiple tasks at once. Exit the session when finished."`;
     return this.run(prompt, dir);
   }
 }

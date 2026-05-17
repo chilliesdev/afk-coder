@@ -28,7 +28,7 @@ describe('WorkflowManager Status Updates', () => {
     const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
     
     let taskCount = 0;
-    const mockRunTask = jest.fn().mockImplementation((name, desc, dir) => {
+    const mockRunTask = jest.fn().mockImplementation((name, dir) => {
       taskCount++;
       return Promise.resolve({
         pid: 100 + taskCount,
@@ -68,7 +68,7 @@ describe('WorkflowManager Status Updates', () => {
     while (!workflow.currentTask && workflow.status !== 'Done') {
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    expect(workflow.currentTask).toBe('Task 1');
+    expect(workflow.currentTask).toBe('Autonomous Task Selection');
 
     // Wait for tasks to complete
     let attempts = 0;
