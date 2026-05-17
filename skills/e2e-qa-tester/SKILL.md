@@ -12,6 +12,7 @@ This skill enables a systematic, user-centric testing workflow. It focuses on id
 - **End-User Perspective:** Always simulate usage from the perspective of an end user (e.g., running CLI commands, interacting with APIs, checking logs).
 - **Zero-Fix Policy:** Do NOT attempt to fix any issues found during the testing phase. Your sole responsibility is to document them.
 - **Evidence-Based:** Every failure or bug reported must include logs, error messages, or clear steps to reproduce.
+- **Artifact Management:** Always delete all test artifacts (temporary files, test databases, logs created during testing) immediately after the test run is complete and the report is generated.
 
 ## Workflow
 
@@ -31,6 +32,9 @@ For each requirement/user flow:
 
 ### 4. Reporting
 Generate a detailed report in `QA_REPORT.md` following the template in `references/QA_REPORT_TEMPLATE.md`.
+
+### 5. Cleanup
+Immediately after generating the `QA_REPORT.md`, identify and delete all temporary files, logs, test directories, or other artifacts created during the simulation phase to leave the workspace in its original state.
 
 ## Guidelines for QA_REPORT.md
 
