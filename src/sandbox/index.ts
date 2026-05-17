@@ -62,6 +62,9 @@ export class Sandbox {
     if (clientId) env.push(`GOOGLE_CLIENT_ID=${clientId}`);
     if (clientSecret) env.push(`GOOGLE_CLIENT_SECRET=${clientSecret}`);
     
+    // Bypass Gemini CLI trust requirement in sandbox
+    env.push('GEMINI_CLI_TRUST_WORKSPACE=true');
+    
     // Also pass through common Gemini CLI auth vars if present on host
     if (process.env.GEMINI_CLI_AUTH_METHOD) env.push(`GEMINI_CLI_AUTH_METHOD=${process.env.GEMINI_CLI_AUTH_METHOD}`);
     if (process.env.GEMINI_PROJECT_ID) env.push(`GEMINI_PROJECT_ID=${process.env.GEMINI_PROJECT_ID}`);
@@ -91,7 +94,12 @@ export class Sandbox {
 
     const cleanup = async () => {
       if (tempDir) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (e: any) {
+          // Ignore cleanup errors - can happen if container created root-owned files
+          // we don't want to crash the whole workflow just for a temp file.
+        }
       }
     };
 

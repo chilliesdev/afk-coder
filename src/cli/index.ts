@@ -85,24 +85,30 @@ program
     const readline = await import('readline');
 
     const config = loadConfig();
-    const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.auth?.clientSecret;
+    const envClientId = process.env.GOOGLE_CLIENT_ID;
+    const envClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    const clientId = envClientId || config.auth?.clientId;
+    const clientSecret = envClientSecret || config.auth?.clientSecret;
     const scopes = config.auth?.scopes || ['https://www.googleapis.com/auth/cloud-platform'];
 
     if (!clientId || !clientSecret) {
-      console.error('Error: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables must be set (or configured in config.json).');
-      console.log('Please create a project in the Google Cloud Console and set these variables.');
+      console.error('Error: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set via environment variables or in config.json.');
+      console.log('Example: GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy afk-coder login');
       return;
     }
 
-    // Save credentials to config for daemon use if provided via env
-    if (process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_SECRET) {
-      config.auth = {
-        ...config.auth,
-        clientId: clientId,
-        clientSecret: clientSecret
-      };
-      saveConfig(config);
+    // Save credentials to config if provided via env and they differ from current config
+    if (envClientId || envClientSecret) {
+      if (envClientId !== config.auth?.clientId || envClientSecret !== config.auth?.clientSecret) {
+        config.auth = {
+          ...config.auth,
+          clientId: clientId,
+          clientSecret: clientSecret
+        };
+        saveConfig(config);
+        console.log('Updated Google Cloud credentials in config.json');
+      }
     }
 
     const oAuth2Client = new OAuth2Client({
