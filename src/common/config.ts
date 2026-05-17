@@ -44,16 +44,18 @@ const DEFAULT_CONFIG: Config = {
 };
 
 
-export function ensureConfigDir() {
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+export function ensureConfigDir(configDir?: string) {
+  const dir = configDir || CONFIG_DIR;
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 }
 
-export function loadConfig(): Config {
-  if (fs.existsSync(CONFIG_PATH)) {
+export function loadConfig(configDir?: string): Config {
+  const configPath = configDir ? path.join(configDir, 'config.json') : CONFIG_PATH;
+  if (fs.existsSync(configPath)) {
     try {
-      const userConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+      const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       return {
         ...DEFAULT_CONFIG,
         ...userConfig,
@@ -77,31 +79,34 @@ export function loadConfig(): Config {
   return DEFAULT_CONFIG;
 }
 
-export function saveConfig(config: Config) {
-  ensureConfigDir();
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+export function saveConfig(config: Config, configDir?: string) {
+  ensureConfigDir(configDir);
+  const configPath = configDir ? path.join(configDir, 'config.json') : CONFIG_PATH;
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 
-export function saveTokens(tokens: any) {
-  ensureConfigDir();
-  fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2));
+export function saveTokens(tokens: any, configDir?: string) {
+  ensureConfigDir(configDir);
+  const tokensPath = configDir ? path.join(configDir, 'tokens.json') : TOKENS_PATH;
+  fs.writeFileSync(tokensPath, JSON.stringify(tokens, null, 2));
 }
 
-export function loadTokens() {
-  if (fs.existsSync(TOKENS_PATH)) {
-    return JSON.parse(fs.readFileSync(TOKENS_PATH, 'utf-8'));
+export function loadTokens(configDir?: string) {
+  const tokensPath = configDir ? path.join(configDir, 'tokens.json') : TOKENS_PATH;
+  if (fs.existsSync(tokensPath)) {
+    return JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
   }
   return null;
 }
 
-export async function refreshToken() {
-  const tokens = loadTokens();
+export async function refreshToken(configDir?: string) {
+  const tokens = loadTokens(configDir);
   if (!tokens || !tokens.refresh_token) {
     return null;
   }
 
   const { OAuth2Client } = await import('google-auth-library');
-  const config = loadConfig();
+  const config = loadConfig(configDir);
   
   const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.auth?.clientSecret;
@@ -116,7 +121,7 @@ export async function refreshToken() {
   try {
     const { credentials } = await oAuth2Client.refreshAccessToken();
     const updatedTokens = { ...tokens, ...credentials };
-    saveTokens(updatedTokens);
+    saveTokens(updatedTokens, configDir);
     return updatedTokens;
   } catch (error) {
     console.error('Error refreshing access token:', error);

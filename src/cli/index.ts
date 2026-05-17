@@ -120,6 +120,7 @@ program
     const authUrl = oAuth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
+      prompt: 'consent',
     });
 
     console.log('Authorize this app by visiting this url:', authUrl);
@@ -266,7 +267,12 @@ program
         return;
       }
 
-      const response = await sendCommand('start', { name: workflowName, dir });
+      const { CONFIG_DIR } = await import('../common/config');
+      const response = await sendCommand('start', { 
+        name: workflowName, 
+        dir,
+        configDir: CONFIG_DIR
+      });
       if (response.success) {
         console.log(`Workflow ${workflowName} started successfully.`);
       } else {

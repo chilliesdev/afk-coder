@@ -22,10 +22,10 @@ export class Sandbox {
    * @param dir The directory to map to /app inside the container.
    * @returns A handle to the running process, including its PID and methods to stop or wait for completion.
    */
-  async run(prompt: string, dir: string) {
-    await refreshToken();
-    const tokens = loadTokens();
-    const config = loadConfig();
+  async run(prompt: string, dir: string, configDir?: string) {
+    await refreshToken(configDir);
+    const tokens = loadTokens(configDir);
+    const config = loadConfig(configDir);
     const hasApiKey = !!process.env['GEMINI_API_KEY'];
     const hasTokens = !!(tokens && tokens.access_token);
 
@@ -53,8 +53,9 @@ export class Sandbox {
       
       fs.writeFileSync(path.join(geminiSettingsDir, 'settings.json'), JSON.stringify(settings));
       
-      if (fs.existsSync(TOKENS_PATH)) {
-        fs.copyFileSync(TOKENS_PATH, path.join(geminiSettingsDir, 'oauth_creds.json'));
+      const tokensPath = configDir ? path.join(configDir, 'tokens.json') : TOKENS_PATH;
+      if (fs.existsSync(tokensPath)) {
+        fs.copyFileSync(tokensPath, path.join(geminiSettingsDir, 'oauth_creds.json'));
       }
       
       // Mount the settings directory into the container's root home
@@ -186,8 +187,8 @@ export class Sandbox {
    * @param dir The directory containing the project files (must include tasks.md).
    * @returns A handle to the running task.
    */
-  async runTask(workflowName: string, dir: string) {
+  async runTask(workflowName: string, dir: string, configDir?: string) {
     const prompt = `gemini --yolo --prompt "Open tasks.md and identify the highest priority uncompleted task (marked with '- [ ]'). Your objective is to implement the necessary code for this task. Explore the codebase, write the code, and thoroughly verify your changes. Once completed and verified, open tasks.md again and mark ONLY that specific task as done by changing '- [ ]' to '- [x]'. Do not work on multiple tasks at once. Exit the session when finished."`;
-    return this.run(prompt, dir);
+    return this.run(prompt, dir, configDir);
   }
 }

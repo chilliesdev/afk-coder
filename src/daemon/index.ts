@@ -26,7 +26,7 @@ const server = net.createServer((socket) => {
 
       switch (request.command) {
         case 'start':
-          const workflow = workflowManager.startWorkflow(request.args.name, request.args.dir);
+          const workflow = workflowManager.startWorkflow(request.args.name, request.args.dir, request.args.configDir);
           response = { success: true, data: workflow };
           break;
         case 'list':

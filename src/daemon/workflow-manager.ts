@@ -39,7 +39,7 @@ export class WorkflowManager {
     return logger;
   }
 
-  startWorkflow(name: string, dir: string) {
+  startWorkflow(name: string, dir: string, configDir?: string) {
     const existing = this.workflows.get(name);
     if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed')) {
       throw new Error(`Workflow ${name} is already running`);
@@ -59,6 +59,7 @@ export class WorkflowManager {
       status: 'Running',
       tokenUsage: { input: 0, output: 0, total: 0 },
       recentTasks: [],
+      configDir,
     };
     this.workflows.set(name, workflow);
 
@@ -99,7 +100,7 @@ export class WorkflowManager {
 
       while (retries <= maxRetries && !success) {
         try {
-          const run = await this.sandbox.runTask(workflow.name, workflow.dir);
+          const run = await this.sandbox.runTask(workflow.name, workflow.dir, workflow.configDir);
           workflow.pid = run.pid;
           workflow.stopHandle = run.stop;
           

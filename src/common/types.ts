@@ -14,6 +14,7 @@ export interface Workflow {
   tokenUsage: TokenUsage;
   currentTask?: string;
   recentTasks: string[];
+  configDir?: string;
 }
 
 export interface DaemonResponse<T = any> {
