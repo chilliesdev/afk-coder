@@ -3,7 +3,7 @@ import { DaemonResponse } from '../common/types';
 import { loadConfig } from '../common/config';
 
 const config = loadConfig();
-const SOCKET_PATH = config.daemon?.socketPath || '/tmp/afk-coder.sock';
+const SOCKET_PATH = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath || '/tmp/afk-coder.sock';
 
 export async function sendCommand(command: string, args: any = {}): Promise<DaemonResponse> {
   return new Promise((resolve, reject) => {

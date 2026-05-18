@@ -14,19 +14,20 @@ program
 
 program
   .command('init')
-  .description('Generate tasks.md from PRD.md')
-  .option('--dir <path>', 'Directory containing PRD.md', '.')
+  .description('Generate tasks.md from a PRD file')
+  .option('--dir <path>', 'Directory containing the PRD file', '.')
+  .option('--prd <filename>', 'Name of the PRD file', 'PRD.md')
   .option('--force', 'Overwrite existing tasks.md')
   .action(async (options) => {
     const { Sandbox } = await import('../sandbox');
     const sandbox = new Sandbox();
 
     const dir = path.resolve(options.dir);
-    const prdPath = path.join(dir, 'PRD.md');
+    const prdPath = path.join(dir, options.prd);
     const tasksPath = path.join(dir, 'tasks.md');
 
     if (!fs.existsSync(prdPath)) {
-      console.error(`Error: PRD.md not found in ${dir}`);
+      console.error(`Error: ${options.prd} not found in ${dir}`);
       return;
     }
 
@@ -35,28 +36,29 @@ program
       return;
     }
 
+    // Pre-create the file to ensure it is owned by the current user, not root
+    try {
+      fs.writeFileSync(tasksPath, '');
+    } catch (err: any) {
+      console.error(`Failed to create tasks.md: ${err.message}`);
+      return;
+    }
+
     console.log(`Generating tasks.md from ${prdPath} using Docker sandbox...`);
     try {
       const { AgentStrategy } = await import('../daemon/agent-strategy');
       const strategy = new AgentStrategy();
-      const prompt = strategy.getTaskGenerationPrompt();
+      const prompt = strategy.getTaskGenerationPrompt(options.prd);
 
       const run = await sandbox.run(prompt, dir);
       const result = await run.wait();
 
       if (result.exitCode === 0) {
         if (fs.existsSync(tasksPath)) {
-          console.log('Successfully generated tasks.md');
-        } else {
-          // If gemini didn't write the file directly (e.g. it just outputted to stdout),
-          // we can try to use the logs, but ideally gemini --yolo with that prompt should write it if it's smart enough,
-          // OR we can just write it ourselves from logs if it's missing.
-          // However, gemini CLI usually writes files if instructed.
-          // Let's check if tasks.md was created in the mapped volume.
-          if (fs.existsSync(tasksPath)) {
-            console.log('Successfully generated tasks.md');
-          } else {
-            // Fallback: write stdout to tasks.md if it looks like task list
+          const content = fs.readFileSync(tasksPath, 'utf8');
+          if (content.trim() === '') {
+            // If the file is still empty, the sandbox didn't write to it directly.
+            // Let's try to parse stdout.
             const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
             if (lines.length > 0) {
               fs.writeFileSync(tasksPath, lines.join('\n'));
@@ -64,8 +66,15 @@ program
             } else {
               console.error('Failed to generate tasks.md: No tasks found in output');
               console.log('Logs:', result.logs);
+              // Clean up empty file
+              fs.unlinkSync(tasksPath);
             }
+          } else {
+            console.log('Successfully generated tasks.md');
           }
+        } else {
+            // this branch should never be hit since we pre-created it, but just in case
+            console.error('Failed to generate tasks.md: File disappeared');
         }
       } else {
         console.error(`Failed to generate tasks.md: Exit code ${result.exitCode}`);
@@ -75,6 +84,7 @@ program
       console.error('Failed to generate tasks.md:', err.message);
     }
   });
+
 
 program
   .command('login')
