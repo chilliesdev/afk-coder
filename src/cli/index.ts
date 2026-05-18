@@ -169,11 +169,53 @@ program
 
         if (code) {
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end('<h1>Authentication successful!</h1><p>Please return to the console.</p><script>window.close();</script>');
+          res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Successful - afk-coder</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f0fdf4; color: #166534; text-align: center; }
+    main { padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); max-width: 400px; width: 90%; }
+    h1 { margin-top: 0; font-size: 1.5rem; }
+    p { color: #4b5563; margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <main role="main">
+    <h1>Authentication Successful! 🎉</h1>
+    <p>You can safely close this window and return to your terminal.</p>
+  </main>
+  <script>setTimeout(() => window.close(), 3000);</script>
+</body>
+</html>`);
           await finishLogin(code);
         } else if (error) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end(`<h1>Authentication failed!</h1><p>Error: ${error}</p>`);
+          res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Failed - afk-coder</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fef2f2; color: #991b1b; text-align: center; }
+    main { padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); max-width: 400px; width: 90%; }
+    h1 { margin-top: 0; font-size: 1.5rem; }
+    p { color: #4b5563; }
+    .error-msg { background: #fee2e2; padding: 0.75rem; border-radius: 6px; font-family: monospace; color: #b91c1c; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main role="main">
+    <h1>Authentication Failed 😕</h1>
+    <p>There was a problem authenticating with Google.</p>
+    <div class="error-msg">${error}</div>
+    <p style="margin-bottom: 0; margin-top: 1rem;">Please close this window and try again.</p>
+  </main>
+</body>
+</html>`);
           if (!isFinished) {
             isFinished = true;
             rl.close();
@@ -189,7 +231,27 @@ program
       } catch (err: any) {
         console.error('Error retrieving access token', err.message);
         res.writeHead(500);
-        res.end('Authentication failed.');
+        res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Failed - afk-coder</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fef2f2; color: #991b1b; text-align: center; }
+    main { padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); max-width: 400px; width: 90%; }
+    h1 { margin-top: 0; font-size: 1.5rem; }
+    p { color: #4b5563; }
+  </style>
+</head>
+<body>
+  <main role="main">
+    <h1>Authentication Error 😕</h1>
+    <p>An unexpected error occurred during authentication.</p>
+    <p style="margin-bottom: 0;">Please check your terminal for details.</p>
+  </main>
+</body>
+</html>`);
         if (!isFinished) {
           isFinished = true;
           rl.close();
