@@ -1,10 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-
-export interface Task {
-  completed: boolean;
-  description: string;
-}
+import { Task } from './types';
 
 export function parseTasks(content: string): Task[] {
   // Handle literal \n by replacing it with real newline
@@ -27,7 +23,7 @@ export function validateTasks(content: string) {
   const taskLines = lines.filter(l => l.startsWith('- ['));
   
   if (taskLines.length === 0) {
-    throw new Error('No tasks found in tasks.md. Ensure tasks follow the "- [ ] Task description" format.');
+    throw new Error('No tasks found in tasks.md');
   }
 
   for (const line of taskLines) {

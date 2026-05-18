@@ -4,6 +4,32 @@ export interface TokenUsage {
   total: number;
 }
 
+export type AgentErrorType = 'Quota' | 'Safety' | 'Runtime' | 'NoProgress';
+
+export interface AgentError {
+  type: AgentErrorType;
+  message: string;
+}
+
+export interface Outcome {
+  success: boolean;
+  tokens: TokenUsage;
+  error?: AgentError;
+}
+
+export interface Task {
+  completed: boolean;
+  description: string;
+}
+
+export interface TaskBoard {
+  sync(): Promise<void>;
+  getPendingTasks(): Task[];
+  getNewlyCompleted(previousSnapshot: Task[]): Task[];
+  getProgress(): { completed: number; total: number; percentage: string };
+  getTasks(): Task[];
+}
+
 export interface Workflow {
   name: string;
   pid?: number;

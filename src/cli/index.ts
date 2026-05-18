@@ -37,7 +37,9 @@ program
 
     console.log(`Generating tasks.md from ${prdPath} using Docker sandbox...`);
     try {
-      const prompt = 'gemini --yolo --prompt "Read the PRD.md file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \\"- [ ] Task description\\". Do not output the tasks to the console; you must write them directly to the tasks.md file."';
+      const { AgentStrategy } = await import('../daemon/agent-strategy');
+      const strategy = new AgentStrategy();
+      const prompt = strategy.getTaskGenerationPrompt();
 
       const run = await sandbox.run(prompt, dir);
       const result = await run.wait();

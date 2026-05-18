@@ -1,12 +1,13 @@
 import { WorkflowManager } from '../src/daemon/workflow-manager';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Sandbox } from '../src/sandbox';
-
-jest.mock('../src/sandbox');
+import { MockRuntime } from './mocks/mock-runtime';
+import { AgentStrategy } from '../src/daemon/agent-strategy';
 
 describe('WorkflowManager Integration', () => {
   let workflowManager: WorkflowManager;
+  let mockRuntime: MockRuntime;
+  let strategy: AgentStrategy;
   const testDir = path.resolve('./test-workflow');
 
   beforeEach(() => {
@@ -17,7 +18,9 @@ describe('WorkflowManager Integration', () => {
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD\nTest PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     
-    workflowManager = new WorkflowManager();
+    mockRuntime = new MockRuntime();
+    strategy = new AgentStrategy();
+    workflowManager = new WorkflowManager(mockRuntime, strategy);
   });
 
   afterEach(() => {
@@ -27,31 +30,33 @@ describe('WorkflowManager Integration', () => {
   });
 
   it('should start a workflow and run tasks', async () => {
-    const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
-    const mockRunTask = jest.fn().mockResolvedValue({
-      pid: 123,
-      prompt: 'mock prompt',
-      wait: async () => {
-        // Simulate task marking itself as done
-        fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
-        return { exitCode: 0, logs: 'Task completed! Tokens: 10 input, 20 output' };
-      },
-      stop: async () => {}
-    });
-    
-    mockSandbox.mockImplementation(() => {
-      return {
-        runTask: mockRunTask
-      } as any;
-    });
+    mockRuntime.nextResult = { 
+      exitCode: 0, 
+      logs: 'Task completed! Tokens: 10 input, 20 output' 
+    };
 
-    workflowManager = new WorkflowManager();
-    const workflow = workflowManager.startWorkflow('test-workflow', testDir);
+    // We don't need to mock wait manually, MockRuntime handles it.
+    // But we need to make sure tasks.md is updated so the loop finishes.
+    
+    const workflow = await workflowManager.startWorkflow('test-workflow', testDir);
     expect(workflow.status).toMatch(/^Running/);
     expect(workflow.name).toBe('test-workflow');
 
-    // Wait for the loop to finish (it should finish because we mark task as done)
+    // Simulate agent marking task as done
+    // In a real integration test, the agent would do this. 
+    // Here we can do it after a short delay or by mocking the runtime's wait to do it.
     
+    const originalRun = mockRuntime.run.bind(mockRuntime);
+    mockRuntime.run = async (prompt, dir, configDir) => {
+      const handle = await originalRun(prompt, dir, configDir);
+      const originalWait = handle.wait.bind(handle);
+      handle.wait = async () => {
+        fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
+        return await originalWait();
+      };
+      return handle;
+    };
+
     let attempts = 0;
     while (workflow.status !== 'Done' && workflow.status !== 'Failed' && attempts < 60) {
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -64,26 +69,23 @@ describe('WorkflowManager Integration', () => {
     const logs = workflowManager.getLogs('test-workflow');
     expect(logs.content).toContain('Tasks completed successfully');
     expect(logs.content).toContain('"input":10,"output":20');
-    expect(logs.content).toContain('mock prompt');
   }, 40000);
 
   it('should allow restarting a workflow that is Done or Failed', async () => {
-    const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
-    mockSandbox.mockImplementation(() => {
-      return {
-        runTask: jest.fn().mockResolvedValue({
-          pid: 123,
-          prompt: 'mock prompt',
-          wait: async () => {
-            fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
-            return { exitCode: 0, logs: 'Done' };
-          },
-          stop: async () => {}
-        })
-      } as any;
-    });
+    mockRuntime.nextResult = { exitCode: 0, logs: 'Done' };
+    
+    const originalRun = mockRuntime.run.bind(mockRuntime);
+    mockRuntime.run = async (prompt, dir, configDir) => {
+      const handle = await originalRun(prompt, dir, configDir);
+      const originalWait = handle.wait.bind(handle);
+      handle.wait = async () => {
+        fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
+        return await originalWait();
+      };
+      return handle;
+    };
 
-    workflowManager.startWorkflow('restart-test', testDir);
+    await workflowManager.startWorkflow('restart-test', testDir);
     
     // Wait for it to be Done
     let attempts = 0;
@@ -96,7 +98,7 @@ describe('WorkflowManager Integration', () => {
 
     // Attempt to start it again
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1'); // Reset tasks
-    expect(() => workflowManager.startWorkflow('restart-test', testDir)).not.toThrow();
+    await workflowManager.startWorkflow('restart-test', testDir);
     
     const workflow = workflowManager.listWorkflows().find(w => w.name === 'restart-test');
     expect(workflow?.status).toMatch(/^Running/);

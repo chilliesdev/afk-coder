@@ -1,9 +1,11 @@
-import { Workflow } from '../common/types';
+import { Workflow, Task, TaskBoard as ITaskBoard } from '../common/types';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Sandbox } from '../sandbox';
 import * as winston from 'winston';
-import { validateWorkflowDir, parseTasks } from '../common/validation';
+import { TaskBoard } from './task-board';
+import { parseAgentOutput } from './agent-outcome';
+import { ExecutionRuntime } from './execution-runtime';
+import { AgentStrategy } from './agent-strategy';
 
 interface WorkflowRuntime extends Workflow {
   stopHandle?: () => Promise<void>;
@@ -12,10 +14,18 @@ interface WorkflowRuntime extends Workflow {
 export class WorkflowManager {
   private workflows: Map<string, WorkflowRuntime> = new Map();
   private loggers: Map<string, winston.Logger> = new Map();
-  private sandbox: Sandbox;
+  private runtime: ExecutionRuntime;
+  private strategy: AgentStrategy;
+  private taskBoardFactory: (path: string) => ITaskBoard;
 
-  constructor() {
-    this.sandbox = new Sandbox();
+  constructor(
+    runtime: ExecutionRuntime, 
+    strategy: AgentStrategy, 
+    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(p)
+  ) {
+    this.runtime = runtime;
+    this.strategy = strategy;
+    this.taskBoardFactory = taskBoardFactory;
   }
 
   private getOrCreateLogger(name: string, dir: string): winston.Logger {
@@ -39,7 +49,7 @@ export class WorkflowManager {
     return logger;
   }
 
-  startWorkflow(name: string, dir: string, configDir?: string) {
+  async startWorkflow(name: string, dir: string, configDir?: string) {
     const existing = this.workflows.get(name);
     if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed')) {
       throw new Error(`Workflow ${name} is already running`);
@@ -49,13 +59,31 @@ export class WorkflowManager {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    const { tasks, pendingTasks } = validateWorkflowDir(dir);
+    const tasksPath = path.join(dir, 'tasks.md');
+    const prdPath = path.join(dir, 'PRD.md');
+
+    if (!fs.existsSync(prdPath)) {
+      throw new Error(`PRD.md not found in ${dir}`);
+    }
+    if (!fs.existsSync(tasksPath)) {
+      throw new Error(`tasks.md not found in ${dir}`);
+    }
+
+    const taskBoard = this.taskBoardFactory(tasksPath);
+    await taskBoard.sync();
+    
+    const progress = taskBoard.getProgress();
+    const pendingTasks = taskBoard.getPendingTasks();
+
+    if (pendingTasks.length === 0) {
+      throw new Error(`No pending tasks found in tasks.md in ${dir}`);
+    }
 
     const workflow: WorkflowRuntime = {
       name,
       dir,
       uptime: Date.now(),
-      progress: `${tasks.length - pendingTasks.length}/${tasks.length}`,
+      progress: `${progress.completed}/${progress.total}`,
       status: 'Running',
       tokenUsage: { input: 0, output: 0, total: 0 },
       recentTasks: [],
@@ -76,14 +104,15 @@ export class WorkflowManager {
 
   private async runWorkflowLoop(workflow: WorkflowRuntime) {
     const tasksPath = path.join(workflow.dir, 'tasks.md');
+    const taskBoard = this.taskBoardFactory(tasksPath);
     const logger = this.getOrCreateLogger(workflow.name, workflow.dir);
 
     while (workflow.status !== 'Failed' && workflow.status !== 'Done') {
-      const tasksContent = fs.readFileSync(tasksPath, 'utf-8');
-      const tasks = parseTasks(tasksContent);
-      const pendingTasks = tasks.filter(t => !t.completed);
+      await taskBoard.sync();
+      const pendingTasks = taskBoard.getPendingTasks();
+      const progress = taskBoard.getProgress();
 
-      workflow.progress = `${tasks.length - pendingTasks.length}/${tasks.length}`;
+      workflow.progress = `${progress.completed}/${progress.total}`;
 
       if (pendingTasks.length === 0) {
         logger.info('All tasks completed');
@@ -100,7 +129,10 @@ export class WorkflowManager {
 
       while (retries <= maxRetries && !success) {
         try {
-          const run = await this.sandbox.runTask(workflow.name, workflow.dir, workflow.configDir);
+          const previousTasks = taskBoard.getTasks();
+          const prompt = this.strategy.getAutonomousLoopPrompt();
+          const run = await this.runtime.run(prompt, workflow.dir, workflow.configDir);
+          
           workflow.pid = run.pid;
           workflow.stopHandle = run.stop;
           
@@ -116,39 +148,18 @@ export class WorkflowManager {
             // Workflow was killed while waiting
             break;
           }
+
+          const outcome = parseAgentOutput(result.logs, result.exitCode);
           
-          if (result.exitCode === 0) {
-            // Extract token usage if present in logs - more robust regexes
-            const tokenPatterns = [
-              /usage:\s*{\s*prompt_tokens:\s*(\d+),\s*completion_tokens:\s*(\d+)/i, // JSON-like
-              /Token usage:\s+(\d+)\s+prompt,\s+(\d+)\s+completion/i,
-              /(\d+)\s*prompt tokens,?\s*(\d+)\s*completion tokens/i,
-              /tokens:\s*(\d+)\s*in,\s*(\d+)\s*out/i,
-              /input:\s*(\d+),\s*output:\s*(\d+)/i,
-              /(?:Tokens|Usage):?\s*(?:input:?\s*)?(\d+)\s+(?:input|prompt)?(?:s)?,?\s*(?:output:?\s*)?(\d+)\s*(?:output|completion)?(?:s)?/i
-            ];
+          // Update global token usage
+          workflow.tokenUsage.input += outcome.tokens.input;
+          workflow.tokenUsage.output += outcome.tokens.output;
+          workflow.tokenUsage.total += outcome.tokens.total;
 
-            let taskTokenUsage = { input: 0, output: 0, total: 0 };
-
-            for (const pattern of tokenPatterns) {
-              const match = result.logs.match(pattern);
-              if (match) {
-                const input = parseInt(match[1]);
-                const output = parseInt(match[2]);
-                taskTokenUsage = { input, output, total: input + output };
-                workflow.tokenUsage.input += input;
-                workflow.tokenUsage.output += output;
-                workflow.tokenUsage.total += (input + output);
-                break;
-              }
-            }
-
-            // Check if tasks.md was updated
-            const updatedTasksContent = fs.readFileSync(tasksPath, 'utf-8');
-            const updatedTasks = parseTasks(updatedTasksContent);
-            const postPendingTasks = updatedTasks.filter(t => !t.completed);
-            
-            const newlyCompletedTasks = pendingTasks.filter(pre => !postPendingTasks.find(post => post.description === pre.description));
+          if (outcome.success) {
+            // Sync task board to see what changed
+            await taskBoard.sync();
+            const newlyCompletedTasks = taskBoard.getNewlyCompleted(previousTasks);
             
             if (newlyCompletedTasks.length === 0) {
               throw new Error(`No tasks were marked as completed in tasks.md`);
@@ -163,34 +174,41 @@ export class WorkflowManager {
             }
             workflow.currentTask = undefined;
 
+            const newProgress = taskBoard.getProgress();
+            workflow.progress = `${newProgress.completed}/${newProgress.total}`;
+
             logger.info('Tasks completed successfully', { 
               completedTasks: newlyCompletedTasks.map(t => t.description), 
               exitCode: result.exitCode,
               output: result.logs,
-              tokenUsage: taskTokenUsage,
+              tokenUsage: outcome.tokens,
               workflowTokenUsage: workflow.tokenUsage
             });
             success = true;
           } else {
-            // Check for API-specific errors
-            const isQuotaError = /429|Too Many Requests|Quota exceeded|Resource has been exhausted/i.test(result.logs);
-            const isSafetyError = /Candidate was blocked due to safety/i.test(result.logs);
-            
+            const error = outcome.error!;
             retries++;
+            
             if (retries <= maxRetries) {
               let delay = Math.pow(2, retries) * 5000;
               
-              if (isQuotaError) {
+              if (error.type === 'Quota') {
                 delay = Math.max(delay, 60000); // Wait at least 60s for quota errors
                 logger.warn('Gemini API quota exceeded, waiting longer...', {
                   attempt: retries,
                   nextRetryIn: `${delay / 1000}s`
                 });
-              } else if (isSafetyError) {
+              } else if (error.type === 'Safety') {
                 logger.error('Task blocked by safety filters', {
                   output: result.logs
                 });
                 workflow.status = 'Failed: Safety Block';
+                break;
+              } else if (error.type === 'NoProgress') {
+                logger.error('Agent reported no progress', {
+                  output: result.logs
+                });
+                workflow.status = 'Failed: No Progress';
                 break;
               } else {
                 logger.warn('Agent loop failed, retrying...', { 
@@ -205,7 +223,8 @@ export class WorkflowManager {
             } else {
               logger.error('Agent loop failed after max retries', { 
                 exitCode: result.exitCode,
-                output: result.logs
+                output: result.logs,
+                error: error.message
               });
               workflow.status = 'Failed';
               break;
@@ -215,14 +234,14 @@ export class WorkflowManager {
           retries++;
           if (retries <= maxRetries) {
             const delay = Math.pow(2, retries) * 5000;
-            logger.error('Sandbox error, retrying...', { 
+            logger.error('Runtime error, retrying...', { 
               error: err.message,
               attempt: retries,
               nextRetryIn: `${delay / 1000}s`
             });
             await new Promise(resolve => setTimeout(resolve, delay));
           } else {
-            logger.error('Sandbox error after max retries', { 
+            logger.error('Runtime error after max retries', { 
               error: err.message 
             });
             throw err;
@@ -230,7 +249,7 @@ export class WorkflowManager {
         }
       }
 
-      if (workflow.status === 'Failed') break;
+      if (workflow.status === 'Failed' || workflow.status.startsWith('Failed')) break;
 
       await new Promise(resolve => setTimeout(resolve, 5000)); // Sleep between iterations
     }

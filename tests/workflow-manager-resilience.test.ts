@@ -1,12 +1,13 @@
 import { WorkflowManager } from '../src/daemon/workflow-manager';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Sandbox } from '../src/sandbox';
-
-jest.mock('../src/sandbox');
+import { MockRuntime } from './mocks/mock-runtime';
+import { AgentStrategy } from '../src/daemon/agent-strategy';
 
 describe('WorkflowManager Resilience', () => {
   let workflowManager: WorkflowManager;
+  let mockRuntime: MockRuntime;
+  let strategy: AgentStrategy;
   const baseTestDir = path.resolve('./test-resilience');
 
   beforeEach(() => {
@@ -14,6 +15,10 @@ describe('WorkflowManager Resilience', () => {
       fs.rmSync(baseTestDir, { recursive: true, force: true });
     }
     fs.mkdirSync(baseTestDir);
+
+    mockRuntime = new MockRuntime();
+    strategy = new AgentStrategy();
+    workflowManager = new WorkflowManager(mockRuntime, strategy);
   });
 
   afterEach(() => {
@@ -28,7 +33,6 @@ describe('WorkflowManager Resilience', () => {
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD\nTest PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
 
-    const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
     const logs = [
       'Usage: input: 100 prompt, output: 200 completion',
       '200 prompt tokens, 300 completion tokens',
@@ -48,38 +52,32 @@ describe('WorkflowManager Resilience', () => {
 
     let currentLogIndex = 0;
     
-    const mockRunTask = jest.fn().mockImplementation(async () => {
+    const originalRun = mockRuntime.run.bind(mockRuntime);
+    mockRuntime.run = async (prompt, dir, configDir) => {
       const idx = currentLogIndex++;
-      return {
-        pid: 123 + idx,
-        prompt: 'mock prompt',
-        wait: async () => {
-          // Add another task so the loop continues
-          const tasks = [];
-          for (let i = 0; i <= idx; i++) tasks.push(`- [x] Task ${i+1}`);
-          if (idx < logs.length - 1) tasks.push(`- [ ] Task ${idx+2}`);
-          fs.writeFileSync(path.join(testDir, 'tasks.md'), tasks.join('\n'));
-          
-          return { exitCode: 0, logs: logs[idx] };
-        },
-        stop: async () => {}
+      const handle = await originalRun(prompt, dir, configDir);
+      const originalWait = handle.wait.bind(handle);
+      handle.wait = async () => {
+        // Add another task so the loop continues
+        const tasks = [];
+        for (let i = 0; i <= idx; i++) tasks.push(`- [x] Task ${i+1}`);
+        if (idx < logs.length - 1) tasks.push(`- [ ] Task ${idx+2}`);
+        fs.writeFileSync(path.join(testDir, 'tasks.md'), tasks.join('\n'));
+        
+        return { exitCode: 0, logs: logs[idx] };
       };
-    });
-    
-    mockSandbox.mockImplementation(() => {
-      return {
-        runTask: mockRunTask
-      } as any;
-    });
+      return handle;
+    };
 
-    workflowManager = new WorkflowManager();
     jest.useFakeTimers();
 
-    const workflow = workflowManager.startWorkflow('test-tokens', testDir);
+    const workflow = await workflowManager.startWorkflow('test-tokens', testDir);
+    const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     let attempts = 0;
     while (workflow.status !== 'Done' && workflow.status !== 'Failed' && attempts < 100) {
       await jest.advanceTimersByTimeAsync(5000);
+      await flushPromises();
       attempts++;
     }
 
@@ -99,49 +97,45 @@ describe('WorkflowManager Resilience', () => {
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD\nTest PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
 
-    const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
     let callCount = 0;
     
-    const mockRunTask = jest.fn().mockImplementation(async () => {
+    const originalRun = mockRuntime.run.bind(mockRuntime);
+    mockRuntime.run = async (prompt, dir, configDir) => {
       callCount++;
-      return {
-        pid: 429,
-        prompt: 'mock prompt',
-        wait: async () => {
-          if (callCount === 1) {
-            return { exitCode: 1, logs: 'Error: 429 Too Many Requests' };
-          }
-          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
-          return { exitCode: 0, logs: 'Success after retry' };
-        },
-        stop: async () => {}
+      const currentCallCount = callCount;
+      const handle = await originalRun(prompt, dir, configDir);
+      const originalWait = handle.wait.bind(handle);
+      handle.wait = async () => {
+        if (currentCallCount === 1) {
+          return { exitCode: 1, logs: 'Error: 429 Too Many Requests' };
+        }
+        fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
+        return { exitCode: 0, logs: 'Success after retry' };
       };
-    });
-    
-    mockSandbox.mockImplementation(() => {
-      return {
-        runTask: mockRunTask
-      } as any;
-    });
+      return handle;
+    };
 
-    workflowManager = new WorkflowManager();
     jest.useFakeTimers();
 
-    const workflow = workflowManager.startWorkflow('test-429', testDir);
+    const workflow = await workflowManager.startWorkflow('test-429', testDir);
+    const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     let attempts = 0;
     while (callCount === 0 && attempts < 100) {
         await jest.advanceTimersByTimeAsync(100);
+        await flushPromises();
         attempts++;
     }
     
     expect(callCount).toBe(1);
     
     await jest.advanceTimersByTimeAsync(65000);
+    await flushPromises();
     
     attempts = 0;
     while (callCount === 1 && attempts < 100) {
         await jest.advanceTimersByTimeAsync(100);
+        await flushPromises();
         attempts++;
     }
     expect(callCount).toBe(2);
@@ -149,6 +143,7 @@ describe('WorkflowManager Resilience', () => {
     attempts = 0;
     while (workflow.status !== 'Done' && attempts < 100) {
         await jest.advanceTimersByTimeAsync(5000);
+        await flushPromises();
         attempts++;
     }
 

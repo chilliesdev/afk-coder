@@ -4,9 +4,13 @@ import * as child_process from 'child_process';
 import { WorkflowManager } from './workflow-manager';
 import { DaemonResponse } from '../common/types';
 import { loadConfig } from '../common/config';
+import { DockerRuntime } from './runtime-docker';
+import { AgentStrategy } from './agent-strategy';
 
 const config = loadConfig();
-const workflowManager = new WorkflowManager();
+const runtime = new DockerRuntime();
+const strategy = new AgentStrategy();
+const workflowManager = new WorkflowManager(runtime, strategy);
 
 const SOCKET_PATH = config.daemon?.socketPath;
 
@@ -26,7 +30,7 @@ const server = net.createServer((socket) => {
 
       switch (request.command) {
         case 'start':
-          const workflow = workflowManager.startWorkflow(request.args.name, request.args.dir, request.args.configDir);
+          const workflow = await workflowManager.startWorkflow(request.args.name, request.args.dir, request.args.configDir);
           response = { success: true, data: workflow };
           break;
         case 'list':

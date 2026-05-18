@@ -2,14 +2,10 @@ import Docker from 'dockerode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { ExecutionRuntime, RuntimeHandle, RuntimeResult } from './execution-runtime';
 import { loadTokens, refreshToken, loadConfig, TOKENS_PATH } from '../common/config';
 
-export interface SandboxOptions {
-  dir: string;
-  image: string;
-}
-
-export class Sandbox {
+export class DockerRuntime implements ExecutionRuntime {
   private docker: Docker;
 
   constructor() {
@@ -20,9 +16,10 @@ export class Sandbox {
    * Runs an arbitrary prompt inside a Docker container using the Gemini CLI.
    * @param prompt The full command or prompt to execute.
    * @param dir The directory to map to /app inside the container.
-   * @returns A handle to the running process, including its PID and methods to stop or wait for completion.
+   * @param configDir Optional directory for configuration files.
+   * @returns A handle to the running process.
    */
-  async run(prompt: string, dir: string, configDir?: string) {
+  async run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle> {
     await refreshToken(configDir);
     const tokens = loadTokens(configDir);
     const config = loadConfig(configDir);
@@ -105,8 +102,7 @@ export class Sandbox {
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
         } catch (e: any) {
-          // Ignore cleanup errors - can happen if container created root-owned files
-          // we don't want to crash the whole workflow just for a temp file.
+          // Ignore cleanup errors
         }
       }
     };
@@ -127,7 +123,7 @@ export class Sandbox {
         }
         await cleanup();
       },
-      wait: async () => {
+      wait: async (): Promise<RuntimeResult> => {
         const result = await container.wait();
         // Get logs and demux them (strip the 8-byte Docker headers)
         const logBuffer = await container.logs({ stdout: true, stderr: true });
@@ -179,18 +175,5 @@ export class Sandbox {
         throw err;
       }
     }
-  }
-
-  /**
-   * Runs an autonomous task selection loop inside the sandbox.
-   * @param workflowName The name of the workflow this task belongs to.
-   * @param dir The directory containing the project files (must include tasks.md).
-   * @returns A handle to the running task.
-   */
-  async runTask(workflowName: string, dir: string, configDir?: string) {
-    const { AgentStrategy } = await import('../daemon/agent-strategy');
-    const strategy = new AgentStrategy();
-    const prompt = strategy.getAutonomousLoopPrompt();
-    return this.run(prompt, dir, configDir);
   }
 }

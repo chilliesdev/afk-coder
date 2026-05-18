@@ -1,12 +1,13 @@
 import { WorkflowManager } from '../src/daemon/workflow-manager';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Sandbox } from '../src/sandbox';
-
-jest.mock('../src/sandbox');
+import { MockRuntime } from './mocks/mock-runtime';
+import { AgentStrategy } from '../src/daemon/agent-strategy';
 
 describe('WorkflowManager Status Updates', () => {
   let workflowManager: WorkflowManager;
+  let mockRuntime: MockRuntime;
+  let strategy: AgentStrategy;
   const testDir = path.resolve('./test-status-unit');
 
   beforeEach(() => {
@@ -16,6 +17,11 @@ describe('WorkflowManager Status Updates', () => {
     fs.mkdirSync(testDir);
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# Dummy PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1\n- [ ] Task 2\n- [ ] Task 3\n- [ ] Task 4\n- [ ] Task 5\n- [ ] Task 6');
+
+    mockRuntime = new MockRuntime();
+    mockRuntime.runDelay = 100;
+    strategy = new AgentStrategy();
+    workflowManager = new WorkflowManager(mockRuntime, strategy);
   });
 
   afterEach(() => {
@@ -25,40 +31,32 @@ describe('WorkflowManager Status Updates', () => {
   });
 
   it('should initialize and update status fields correctly', async () => {
-    const mockSandbox = Sandbox as jest.MockedClass<typeof Sandbox>;
-    
     let taskCount = 0;
-    const mockRunTask = jest.fn().mockImplementation((name, dir) => {
-      taskCount++;
-      return Promise.resolve({
-        pid: 100 + taskCount,
-        prompt: `prompt ${taskCount}`,
-        wait: async () => {
-          // Mark task as done in tasks.md
-          const content = fs.readFileSync(path.join(testDir, 'tasks.md'), 'utf-8');
-          const lines = content.split('\n');
-          const taskIndex = lines.findIndex(l => l.includes(`Task ${taskCount}`) && l.includes('[ ]'));
-          if (taskIndex !== -1) {
-            lines[taskIndex] = lines[taskIndex].replace('[ ]', '[x]');
-            fs.writeFileSync(path.join(testDir, 'tasks.md'), lines.join('\n'));
-          }
-          return { 
-            exitCode: 0, 
-            logs: `Task ${taskCount} done. Token usage: 10 prompt, 5 completion` 
-          };
-        },
-        stop: async () => {}
-      });
-    });
     
-    mockSandbox.mockImplementation(() => {
-      return {
-        runTask: mockRunTask
-      } as any;
-    });
+    const originalRun = mockRuntime.run.bind(mockRuntime);
+    mockRuntime.run = async (prompt, dir, configDir) => {
+      taskCount++;
+      const currentTaskCount = taskCount;
+      const handle = await originalRun(prompt, dir, configDir);
+      const originalWait = handle.wait.bind(handle);
+      handle.wait = async () => {
+        // Mark task as done in tasks.md
+        const content = fs.readFileSync(path.join(testDir, 'tasks.md'), 'utf-8');
+        const lines = content.split('\n');
+        const taskIndex = lines.findIndex(l => l.includes(`Task ${currentTaskCount}`) && l.includes('[ ]'));
+        if (taskIndex !== -1) {
+          lines[taskIndex] = lines[taskIndex].replace('[ ]', '[x]');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), lines.join('\n'));
+        }
+        return { 
+          exitCode: 0, 
+          logs: `Task ${currentTaskCount} done. Token usage: 10 prompt, 5 completion` 
+        };
+      };
+      return handle;
+    };
 
-    workflowManager = new WorkflowManager();
-    const workflow = workflowManager.startWorkflow('test-wf', testDir);
+    const workflow = await workflowManager.startWorkflow('test-wf', testDir);
     
     // Initial check
     expect(workflow.tokenUsage).toEqual({ input: 0, output: 0, total: 0 });
