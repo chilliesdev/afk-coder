@@ -12,14 +12,38 @@ const runtime = new DockerRuntime();
 const strategy = new AgentStrategy();
 const workflowManager = new WorkflowManager(runtime, strategy);
 
-const SOCKET_PATH = config.daemon?.socketPath;
+let SOCKET_PATH = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath;
+
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--socket' && args[i+1]) {
+    SOCKET_PATH = args[i+1];
+    i++;
+  } else if (args[i] === '--help') {
+    console.log('Usage: afk-coder-daemon [options]');
+    console.log('Options:');
+    console.log('  --socket <path>   Override the default socket path');
+    console.log('  --help            Show help');
+    process.exit(0);
+  }
+}
 
 if (!SOCKET_PATH) {
   throw new Error('Socket path is not defined in the config. Exiting.');
 }
 
 if (fs.existsSync(SOCKET_PATH)) {
-  fs.unlinkSync(SOCKET_PATH);
+  try {
+    fs.unlinkSync(SOCKET_PATH);
+  } catch (err: any) {
+    if (err.code === 'EPERM' || err.code === 'EACCES') {
+      console.error(`Error: ${err.code}: operation not permitted, unlink '${SOCKET_PATH}'`);
+      console.error('The socket might be owned by another user.');
+      console.error('Use --socket <path> or AFK_CODER_SOCKET env var to specify a different path.');
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 const server = net.createServer((socket) => {

@@ -9,7 +9,7 @@ export class AgentStrategy {
   /**
    * Returns the prompt for generating tasks.md from PRD.md.
    */
-  getTaskGenerationPrompt(): string {
-    return 'gemini --yolo --prompt "Read the PRD.md file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \\"- [ ] Task description\\". Do not output the tasks to the console; you must write them directly to the tasks.md file."';
+  getTaskGenerationPrompt(prdFilename: string = 'PRD.md'): string {
+    return `gemini --yolo --prompt "Read the ${prdFilename} file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \\"- [ ] Task description\\". Do not output the tasks to the console; you must write them directly to the tasks.md file."`;
   }
 }
