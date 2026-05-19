@@ -287,6 +287,7 @@ program
       });
       if (response.success) {
         console.log(`Workflow ${workflowName} started successfully.`);
+        console.log(`💡 Tip: Monitor progress with "afk-coder logs ${workflowName} -f"`);
       } else {
         console.error(`Failed to start workflow: ${response.message}`);
       }
@@ -302,17 +303,22 @@ program
     try {
       const response = await sendCommand('list');
       if (response.success) {
-        const formattedData = response.data.map((w: any) => {
-          const s = Math.floor(w.uptime / 1000);
-          const h = Math.floor(s / 3600);
-          const m = Math.floor((s % 3600) / 60);
-          const rs = s % 60;
-          return {
-            ...w,
-            uptime: `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`,
-          };
-        });
-        console.table(formattedData);
+        if (response.data.length === 0) {
+          console.log('No active or completed workflows found.');
+          console.log('💡 Tip: Start a new workflow with "afk-coder start <name>"');
+        } else {
+          const formattedData = response.data.map((w: any) => {
+            const s = Math.floor(w.uptime / 1000);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const rs = s % 60;
+            return {
+              ...w,
+              uptime: `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`,
+            };
+          });
+          console.table(formattedData);
+        }
       } else {
         console.error(`Failed to list workflows: ${response.message}`);
       }
