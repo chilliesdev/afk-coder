@@ -6,6 +6,131 @@ jest.mock('dockerode');
 jest.mock('../src/common/config');
 
 describe('DockerRuntime', () => {
+
+  it('should cover auth required throw', async () => {
+    (config.loadTokens as jest.Mock).mockReturnValue(null);
+    delete process.env['GEMINI_API_KEY'];
+    await expect(runtime.run('test', './')).rejects.toThrow('Authentication required');
+  });
+
+  it('should cover API key only', async () => {
+    (config.loadTokens as jest.Mock).mockReturnValue(null);
+    process.env['GEMINI_API_KEY'] = 'test-key';
+    const handle = await runtime.run('test', './');
+    expect(handle).toBeDefined();
+  });
+
+  it('should throw if image inspect fails with non-404', async () => {
+    (Docker.prototype.getImage as jest.Mock).mockReturnValue({
+      inspect: jest.fn().mockRejectedValue({ statusCode: 500 })
+    });
+    await expect(runtime.run('test', './')).rejects.toEqual({ statusCode: 500 });
+  });
+
+  it('should throw if pull fails', async () => {
+    (Docker.prototype.getImage as jest.Mock).mockReturnValue({
+      inspect: jest.fn().mockRejectedValue({ statusCode: 404 })
+    });
+    jest.spyOn(Docker.prototype, 'pull').mockImplementation(((image: any, cb: any) => {
+      cb(new Error('pull error'));
+    }) as any);
+    await expect(runtime.run('test', './')).rejects.toThrow('pull error');
+  });
+
+  it('should throw if followProgress fails', async () => {
+    (Docker.prototype.getImage as jest.Mock).mockReturnValue({
+      inspect: jest.fn().mockRejectedValue({ statusCode: 404 })
+    });
+    (runtime as any).docker.modem = {
+      followProgress: jest.fn((stream, onFinished, onProgress) => {
+        onFinished(new Error('progress error'));
+      })
+    };
+    jest.spyOn(Docker.prototype, 'pull').mockImplementation(((image: any, cb: any) => {
+      cb(null, {});
+    }) as any);
+    await expect(runtime.run('test', './')).rejects.toThrow('progress error');
+  });
+
+  it('should pull image if not found locally', async () => {
+    (Docker.prototype.getImage as jest.Mock).mockReturnValue({
+      inspect: jest.fn().mockRejectedValue({ statusCode: 404 })
+    });
+    (runtime as any).docker.modem = {
+      followProgress: jest.fn((stream, onFinished, onProgress) => {
+        onProgress({ status: 'Pulling' });
+        onProgress({ status: 'Downloading' });
+        onProgress({}); // Missing status
+        onFinished(null, {});
+      })
+    };
+    jest.spyOn(Docker.prototype, 'pull').mockImplementation(((image: any, cb: any) => {
+      cb(null, {});
+    }) as any);
+    const result = await runtime.run('test', './');
+    expect(result).toBeDefined();
+  });
+
+  it('should cover no tokens file existing', async () => {
+    (config.loadTokens as jest.Mock).mockReturnValue({ access_token: 'test' });
+    const fsMod = require('fs');
+    jest.spyOn(fsMod, 'existsSync').mockImplementation(((p: any) => {
+      if (typeof p === 'string') return !p.includes('tokens.json');
+      return true;
+    }) as any);
+    jest.spyOn(fsMod, 'mkdirSync').mockImplementation(() => undefined);
+    jest.spyOn(fsMod, 'writeFileSync').mockImplementation(() => undefined);
+    jest.spyOn(fsMod, 'mkdtempSync').mockReturnValue('/tmp/test');
+
+    const handle = await runtime.run('test', './');
+    expect(handle).toBeDefined();
+  });
+
+  it('should cover rmSync exception on cleanup', async () => {
+    const fsMod = require('fs');
+    jest.spyOn(fsMod, 'rmSync').mockImplementation(() => {
+      throw new Error('rmSync error');
+    });
+    const handle = await runtime.run('test', './');
+    await handle.wait();
+  });
+
+  it('should catch container remove error gracefully', async () => {
+    const handle = await runtime.run('test', './');
+    mockContainer.remove.mockRejectedValue(new Error('remove error'));
+    await handle.wait();
+  });
+
+  it('should cover copyFileSync when tokens exist in custom configDir', async () => {
+    (config.loadTokens as jest.Mock).mockReturnValue({ access_token: 'test' });
+    const fsMod = require('fs');
+    jest.spyOn(fsMod, 'existsSync').mockImplementation(((p: any) => {
+      return true;
+    }) as any);
+    jest.spyOn(fsMod, 'mkdirSync').mockImplementation(() => undefined);
+    jest.spyOn(fsMod, 'writeFileSync').mockImplementation(() => undefined);
+    jest.spyOn(fsMod, 'copyFileSync').mockImplementation(() => undefined);
+    jest.spyOn(fsMod, 'mkdtempSync').mockReturnValue('/tmp/test');
+
+    const handle = await runtime.run('test', './', '/custom/config');
+    expect(handle).toBeDefined();
+  });
+
+  it('should pass through GEMINI_CLI_AUTH_METHOD and GEMINI_PROJECT_ID', async () => {
+    process.env.GEMINI_API_KEY = 'test';
+    process.env.GEMINI_CLI_AUTH_METHOD = 'service-account';
+    process.env.GEMINI_PROJECT_ID = 'my-project';
+
+    await runtime.run('test', './');
+
+    expect(Docker.prototype.createContainer).toHaveBeenCalledWith(expect.objectContaining({
+      Env: expect.arrayContaining([
+        'GEMINI_CLI_AUTH_METHOD=service-account',
+        'GEMINI_PROJECT_ID=my-project'
+      ])
+    }));
+  });
+
   let runtime: DockerRuntime;
   let mockContainer: any;
   let originalEnv: NodeJS.ProcessEnv;
