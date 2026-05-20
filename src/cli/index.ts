@@ -169,11 +169,55 @@ program
 
         if (code) {
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end('<h1>Authentication successful!</h1><p>Please return to the console.</p><script>window.close();</script>');
+          res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Successful</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0fdf4; color: #166534; text-align: center; }
+    .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 400px; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    p { font-size: 1rem; margin-bottom: 1.5rem; color: #4b5563; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon" aria-hidden="true">✅</div>
+    <h1>Authentication Successful!</h1>
+    <p>You can now close this window and return to your terminal.</p>
+  </div>
+  <script>setTimeout(() => window.close(), 3000);</script>
+</body>
+</html>`);
           await finishLogin(code);
         } else if (error) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end(`<h1>Authentication failed!</h1><p>Error: ${error}</p>`);
+          res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Failed</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #fef2f2; color: #991b1b; text-align: center; }
+    .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 400px; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    p { font-size: 1rem; margin-bottom: 1.5rem; color: #4b5563; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon" aria-hidden="true">❌</div>
+    <h1>Authentication Failed!</h1>
+    <p>Error: ${error}</p>
+    <p>Please return to your terminal for more details.</p>
+  </div>
+</body>
+</html>`);
           if (!isFinished) {
             isFinished = true;
             rl.close();
