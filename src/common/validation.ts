@@ -1,11 +1,11 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Task } from './types';
 
 export class TaskValidator {
   parseTasks(content: string): Task[] {
     // Handle literal \n by replacing it with real newline
-    const normalizedContent = content.replace(/\\n/g, '\n');
+    const normalizedContent = content.replaceAll(String.raw`\n`, '\n');
     const lines = normalizedContent.split('\n');
     return lines
       .filter(line => line.trim().match(/^- \[[ xX]\]/))
@@ -45,7 +45,7 @@ export class TaskValidator {
       throw new Error(`tasks.md not found in ${dir}`);
     }
 
-    const tasksContent = fs.readFileSync(tasksPath, 'utf-8');
+    const tasksContent = fs.readFileSync(tasksPath, 'utf8');
     this.validateTasks(tasksContent);
     
     const tasks = this.parseTasks(tasksContent);

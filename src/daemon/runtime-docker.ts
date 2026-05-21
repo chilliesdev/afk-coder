@@ -1,7 +1,7 @@
 import Docker from 'dockerode';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { ExecutionRuntime, RuntimeHandle, RuntimeResult } from './execution-runtime';
 import { ConfigManager, TOKENS_PATH } from '../common/config';
 
@@ -104,7 +104,7 @@ export class DockerRuntime implements ExecutionRuntime {
       if (tempDir) {
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
-        } catch (e: any) {
+        } catch {
           // Ignore cleanup errors
         }
       }
@@ -116,12 +116,12 @@ export class DockerRuntime implements ExecutionRuntime {
       stop: async () => {
         try {
           await container.kill();
-        } catch (e) {
+        } catch {
           // Container might already be stopped
         }
         try {
           await container.remove();
-        } catch (e) {
+        } catch {
           // Container might already be removed
         }
         await cleanup();
@@ -139,7 +139,7 @@ export class DockerRuntime implements ExecutionRuntime {
         }
         try {
           await container.remove();
-        } catch (e) {
+        } catch {
           // Container might already be removed by stop()
         }
         await cleanup();
@@ -157,9 +157,9 @@ export class DockerRuntime implements ExecutionRuntime {
   private async ensureImage(image: string) {
     try {
       await this.docker.getImage(image).inspect();
-    } catch (err: any) {
-      if (err.statusCode !== 404) {
-        throw err;
+    } catch (error: any) {
+      if (error.statusCode !== 404) {
+        throw error;
       }
 
       console.log(`Image ${image} not found locally. Pulling...`);

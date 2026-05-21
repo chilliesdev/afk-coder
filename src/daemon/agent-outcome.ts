@@ -52,7 +52,7 @@ export class OutcomeAnalyzer {
 
     let delayMs = Math.pow(2, nextRetry) * 5000;
     if (resolvedError.type === 'Quota') {
-      delayMs = Math.max(delayMs, 60000);
+      delayMs = Math.max(delayMs, 60_000);
     }
     return {
       action: 'retry',
@@ -93,8 +93,8 @@ export class OutcomeAnalyzer {
     for (const pattern of tokenPatterns) {
       const match = logs.match(pattern);
       if (match) {
-        const input = parseInt(match[1], 10);
-        const output = parseInt(match[2], 10);
+        const input = Number.parseInt(match[1], 10);
+        const output = Number.parseInt(match[2], 10);
         return {
           input,
           output,

@@ -153,9 +153,10 @@ describe('WorkflowManager Resilience', () => {
     workflow = workflowManager.getWorkflow('test-429')!;
     expect(workflow.status).toBe('Done');
     
+    jest.useRealTimers();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const logOutput = workflowManager.getLogs('test-429');
     expect(logOutput.content).toContain('Gemini API quota exceeded, waiting longer...');
-    
-    jest.useRealTimers();
   }, 20000);
 });

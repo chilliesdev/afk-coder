@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { DaemonClient } from './client';
-import * as path from 'path';
-import * as fs from 'fs';
-import { execSync } from 'child_process';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import { execSync } from 'node:child_process';
 import { TaskValidator } from '../common/validation';
 
 const client = new DaemonClient();
@@ -37,16 +37,16 @@ program
         configDir: CONFIG_DIR
       });
 
-      if (response.success) {
-        console.log(response.data || 'Successfully generated tasks.md');
-      } else {
+      if (!response.success) {
         console.error(`Failed to generate tasks.md: ${response.message}`);
         if (response.data) {
           console.log('Logs:', response.data);
         }
+        return;
       }
-    } catch (err: any) {
-      console.error('Failed to generate tasks.md:', err.message);
+      console.log(response.data || 'Successfully generated tasks.md');
+    } catch (error: any) {
+      console.error('Failed to generate tasks.md:', error.message);
     }
   });
 
@@ -57,9 +57,9 @@ program
   .action(async () => {
     const { OAuth2Client } = await import('google-auth-library');
     const { ConfigManager } = await import('../common/config');
-    const http = await import('http');
-    const url = await import('url');
-    const readline = await import('readline');
+    const http = await import('node:http');
+    const url = await import('node:url');
+    const readline = await import('node:readline');
 
     const configManager = new ConfigManager();
     const saveTokens = configManager.saveTokens.bind(configManager);
@@ -81,8 +81,7 @@ program
     }
 
     // Save credentials to config if provided via env and they differ from current config
-    if (envClientId || envClientSecret) {
-      if (envClientId !== config.auth?.clientId || envClientSecret !== config.auth?.clientSecret) {
+    if ((envClientId || envClientSecret) && (envClientId !== config.auth?.clientId || envClientSecret !== config.auth?.clientSecret)) {
         config.auth = {
           ...config.auth,
           clientId: clientId,
@@ -91,7 +90,6 @@ program
         saveConfig(config);
         console.log('Updated Google Cloud credentials in config.json');
       }
-    }
 
     const oAuth2Client = new OAuth2Client({
       clientId,
@@ -125,8 +123,8 @@ program
         saveTokens(tokens);
         console.log('Login successful! Tokens saved.');
         process.exit(0);
-      } catch (err: any) {
-        console.error('Error retrieving access token:', err.message);
+      } catch (error: any) {
+        console.error('Error retrieving access token:', error.message);
         process.exit(1);
       }
     };
@@ -141,7 +139,10 @@ program
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end('<h1>Authentication successful!</h1><p>Please return to the console.</p><script>window.close();</script>');
           await finishLogin(code);
-        } else if (error) {
+          return;
+        }
+        
+        if (error) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
           res.end(`<h1>Authentication failed!</h1><p>Error: ${error}</p>`);
           if (!isFinished) {
@@ -150,14 +151,15 @@ program
             server.close();
             process.exit(1);
           }
-        } else {
-          // Handle favicon.ico and any other requests by immediately returning 404
-          // to prevent the browser from hanging.
-          res.writeHead(404);
-          res.end();
+          return;
         }
-      } catch (err: any) {
-        console.error('Error retrieving access token', err.message);
+        
+        // Handle favicon.ico and any other requests by immediately returning 404
+        // to prevent the browser from hanging.
+        res.writeHead(404);
+        res.end();
+      } catch (error: any) {
+        console.error('Error retrieving access token', error.message);
         res.writeHead(500);
         res.end('Authentication failed.');
         if (!isFinished) {
@@ -219,8 +221,8 @@ program
               process.exit(1);
             }
           }
-        } catch (err: any) {
-          console.error('Invalid URL or code input:', err.message);
+        } catch (error: any) {
+          console.error('Invalid URL or code input:', error.message);
           if (!isFinished) {
             isFinished = true;
             rl.close();
@@ -244,8 +246,8 @@ program
       // Validate locally before sending to daemon
       try {
         validateWorkflowDir(dir);
-      } catch (err: any) {
-        console.error(`Validation failed: ${err.message}`);
+      } catch (error: any) {
+        console.error(`Validation failed: ${error.message}`);
         return;
       }
 
@@ -255,13 +257,13 @@ program
         dir,
         configDir: CONFIG_DIR
       });
-      if (response.success) {
-        console.log(`Workflow ${workflowName} started successfully.`);
-      } else {
+      if (!response.success) {
         console.error(`Failed to start workflow: ${response.message}`);
+        return;
       }
-    } catch (err: any) {
-      console.error(err.message);
+      console.log(`Workflow ${workflowName} started successfully.`);
+    } catch (error: any) {
+      console.error(error.message);
     }
   });
 
@@ -271,23 +273,24 @@ program
   .action(async () => {
     try {
       const response = await sendCommand('list');
-      if (response.success) {
-        const formattedData = response.data.map((w: any) => {
-          const s = Math.floor(w.uptime / 1000);
-          const h = Math.floor(s / 3600);
-          const m = Math.floor((s % 3600) / 60);
-          const rs = s % 60;
-          return {
-            ...w,
-            uptime: `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`,
-          };
-        });
-        console.table(formattedData);
-      } else {
+      if (!response.success) {
         console.error(`Failed to list workflows: ${response.message}`);
+        return;
       }
-    } catch (err: any) {
-      console.error(err.message);
+      
+      const formattedData = response.data.map((w: any) => {
+        const s = Math.floor(w.uptime / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const rs = s % 60;
+        return {
+          ...w,
+          uptime: `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`,
+        };
+      });
+      console.table(formattedData);
+    } catch (error: any) {
+      console.error(error.message);
     }
   });
 
@@ -297,55 +300,56 @@ program
   .action(async (workflowName) => {
     try {
       const response = await sendCommand('status', { name: workflowName });
-      if (response.success) {
-        const w = response.data;
-        const s = Math.floor(w.uptime / 1000);
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const rs = s % 60;
-        const uptimeStr = `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`;
-
-        const colors = {
-          reset: '\x1b[0m',
-          bold: '\x1b[1m',
-          green: '\x1b[32m',
-          yellow: '\x1b[33m',
-          red: '\x1b[31m',
-          cyan: '\x1b[36m',
-        };
-
-        let statusColor = colors.reset;
-        if (w.status === 'Done') statusColor = colors.green;
-        else if (w.status.startsWith('Running')) statusColor = colors.yellow;
-        else if (w.status.startsWith('Failed') || w.status === 'Killed') statusColor = colors.red;
-
-        console.log(`${colors.bold}Workflow:${colors.reset} ${colors.cyan}${w.name}${colors.reset}`);
-        console.log('----------------------------------------');
-        console.log(`${colors.bold}Status:${colors.reset}    ${statusColor}${w.status}${colors.reset}`);
-        console.log(`${colors.bold}PID:${colors.reset}       ${w.pid || 'N/A'}`);
-        console.log(`${colors.bold}Uptime:${colors.reset}    ${uptimeStr}`);
-        console.log(`${colors.bold}Directory:${colors.reset} ${w.dir}`);
-        console.log(`${colors.bold}Progress:${colors.reset}  ${w.progress}`);
-        console.log('');
-        console.log(`${colors.bold}Current Task:${colors.reset}`);
-        console.log(`  ${w.currentTask || 'None'}`);
-        console.log('');
-        console.log(`${colors.bold}Recent Tasks:${colors.reset}`);
-        if (w.recentTasks && w.recentTasks.length > 0) {
-          w.recentTasks.forEach((task: string) => console.log(`  - ${task}`));
-        } else {
-          console.log('  None');
-        }
-        console.log('');
-        console.log(`${colors.bold}Token Usage:${colors.reset}`);
-        console.log(`  Input:  ${w.tokenUsage.input.toLocaleString()}`);
-        console.log(`  Output: ${w.tokenUsage.output.toLocaleString()}`);
-        console.log(`  Total:  ${w.tokenUsage.total.toLocaleString()}`);
-      } else {
+      if (!response.success) {
         console.error(`Failed to get status: ${response.message}`);
+        return;
       }
-    } catch (err: any) {
-      console.error(err.message);
+
+      const w = response.data;
+      const s = Math.floor(w.uptime / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const rs = s % 60;
+      const uptimeStr = `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`;
+
+      const colors = {
+        reset: '\u001B[0m',
+        bold: '\u001B[1m',
+        green: '\u001B[32m',
+        yellow: '\u001B[33m',
+        red: '\u001B[31m',
+        cyan: '\u001B[36m',
+      };
+
+      let statusColor = colors.reset;
+      if (w.status === 'Done') statusColor = colors.green;
+      else if (w.status.startsWith('Running')) statusColor = colors.yellow;
+      else if (w.status.startsWith('Failed') || w.status === 'Killed') statusColor = colors.red;
+
+      console.log(`${colors.bold}Workflow:${colors.reset} ${colors.cyan}${w.name}${colors.reset}`);
+      console.log('----------------------------------------');
+      console.log(`${colors.bold}Status:${colors.reset}    ${statusColor}${w.status}${colors.reset}`);
+      console.log(`${colors.bold}PID:${colors.reset}       ${w.pid || 'N/A'}`);
+      console.log(`${colors.bold}Uptime:${colors.reset}    ${uptimeStr}`);
+      console.log(`${colors.bold}Directory:${colors.reset} ${w.dir}`);
+      console.log(`${colors.bold}Progress:${colors.reset}  ${w.progress}`);
+      console.log('');
+      console.log(`${colors.bold}Current Task:${colors.reset}`);
+      console.log(`  ${w.currentTask || 'None'}`);
+      console.log('');
+      console.log(`${colors.bold}Recent Tasks:${colors.reset}`);
+      if (!w.recentTasks || w.recentTasks.length === 0) {
+        console.log('  None');
+        return;
+      }
+      w.recentTasks.forEach((task: string) => console.log(`  - ${task}`));
+      console.log('');
+      console.log(`${colors.bold}Token Usage:${colors.reset}`);
+      console.log(`  Input:  ${w.tokenUsage.input.toLocaleString()}`);
+      console.log(`  Output: ${w.tokenUsage.output.toLocaleString()}`);
+      console.log(`  Total:  ${w.tokenUsage.total.toLocaleString()}`);
+    } catch (error: any) {
+      console.error(error.message);
     }
   });
 
@@ -355,13 +359,13 @@ program
   .action(async (workflowName) => {
     try {
       const response = await sendCommand('kill', { name: workflowName });
-      if (response.success) {
-        console.log(`Workflow ${workflowName} killed.`);
-      } else {
+      if (!response.success) {
         console.error(`Failed to kill workflow: ${response.message}`);
+        return;
       }
-    } catch (err: any) {
-      console.error(err.message);
+      console.log(`Workflow ${workflowName} killed.`);
+    } catch (error: any) {
+      console.error(error.message);
     }
   });
 
@@ -371,13 +375,13 @@ program
   .action(async (workflowName) => {
     try {
       const response = await sendCommand('remove', { name: workflowName });
-      if (response.success) {
-        console.log(`Workflow ${workflowName} removed.`);
-      } else {
+      if (!response.success) {
         console.error(`Failed to remove workflow: ${response.message}`);
+        return;
       }
-    } catch (err: any) {
-      console.error(err.message);
+      console.log(`Workflow ${workflowName} removed.`);
+    } catch (error: any) {
+      console.error(error.message);
     }
   });
 
@@ -389,7 +393,7 @@ program
   .action(async (workflowName, options) => {
     try {
       if (options.follow) {
-        let currentOffset: number | undefined = undefined;
+        let currentOffset: number | undefined;
         console.log(`Following logs for ${workflowName}... (Ctrl+C to stop)`);
 
         // Initial fetch with tail
@@ -418,14 +422,14 @@ program
         }
       } else {
         const response = await sendCommand('logs', { name: workflowName, tail: options.tail });
-        if (response.success) {
-          console.log(response.data.content);
-        } else {
+        if (!response.success) {
           console.error(`Failed to get logs: ${response.message}`);
+          return;
         }
+        console.log(response.data.content);
       }
-    } catch (err: any) {
-      console.error(err.message);
+    } catch (error: any) {
+      console.error(error.message);
     }
   });
 

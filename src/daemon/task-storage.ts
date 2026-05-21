@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 
 export interface TaskBoardStorage {
   exists(): Promise<boolean>;
@@ -14,7 +14,7 @@ export class FileSystemTaskStorage implements TaskBoardStorage {
   }
 
   async read(): Promise<string> {
-    return fs.readFileSync(this.filePath, 'utf-8');
+    return fs.readFileSync(this.filePath, 'utf8');
   }
 
   async write(content: string): Promise<void> {

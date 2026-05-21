@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { ExecutionRuntime, RuntimeHandle } from './execution-runtime';
 
 export class Agent {
@@ -37,8 +37,8 @@ export class Agent {
     // Pre-create the file to ensure it is owned by the daemon process owner, not root in container
     try {
       fs.writeFileSync(tasksPath, '');
-    } catch (err: any) {
-      return { success: false, error: `Failed to create tasks.md: ${err.message}` };
+    } catch (error: any) {
+      return { success: false, error: `Failed to create tasks.md: ${error.message}` };
     }
 
     try {
@@ -74,12 +74,12 @@ export class Agent {
 
       fs.writeFileSync(tasksPath, lines.join('\n'));
       return { success: true, logs: 'Successfully generated tasks.md (from stdout)' };
-    } catch (err: any) {
+    } catch (error: any) {
       // Clean up empty file if exception thrown
       if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
         fs.unlinkSync(tasksPath);
       }
-      return { success: false, error: err.message };
+      return { success: false, error: error.message };
     }
   }
 
@@ -94,6 +94,6 @@ export class Agent {
    * Returns the prompt for generating tasks.md from PRD.md.
    */
   private getTaskGenerationPrompt(prdFilename: string): string {
-    return `gemini --yolo --prompt "Read the ${prdFilename} file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \\"- [ ] Task description\\". Do not output the tasks to the console; you must write them directly to the tasks.md file."`;
+    return String.raw`gemini --yolo --prompt "Read the ${prdFilename} file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \"- [ ] Task description\". Do not output the tasks to the console; you must write them directly to the tasks.md file."`;
   }
 }

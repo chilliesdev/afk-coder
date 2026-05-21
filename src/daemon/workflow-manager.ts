@@ -1,6 +1,6 @@
 import { Workflow, Task, TaskBoard as ITaskBoard } from '../common/types';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
 import { FileSystemTaskStorage } from './task-storage';
@@ -149,7 +149,7 @@ export class WorkflowManager {
       return { content: buffer.toString('utf-8'), nextOffset: stats.size };
     }
 
-    const content = fs.readFileSync(logFile, 'utf-8');
+    const content = fs.readFileSync(logFile, 'utf8');
     const stats = fs.statSync(logFile);
     if (options.tail) {
       const lines = content.trim().split('\n');

@@ -1,6 +1,6 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import 'dotenv/config';
 
 export const CONFIG_DIR = path.join(os.homedir(), '.config', 'afk-coder');
@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: Config = {
   sandbox: {
     image: 'us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0',
     memory: 2 * 1024 * 1024 * 1024, // 2GB
-    nanoCpus: 2000000000, // 2 CPUs
+    nanoCpus: 2_000_000_000, // 2 CPUs
   },
   daemon: {
     socketGroup: 'afk-coder-users',
@@ -66,7 +66,7 @@ export class ConfigManager {
       return DEFAULT_CONFIG;
     }
     try {
-      const userConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf-8'));
+      const userConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
       return {
         ...DEFAULT_CONFIG,
         ...userConfig,
@@ -103,7 +103,7 @@ export class ConfigManager {
     if (!fs.existsSync(this.tokensPath)) {
       return null;
     }
-    return JSON.parse(fs.readFileSync(this.tokensPath, 'utf-8'));
+    return JSON.parse(fs.readFileSync(this.tokensPath, 'utf8'));
   }
 
   async refreshToken(): Promise<any> {

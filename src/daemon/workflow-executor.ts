@@ -47,8 +47,8 @@ export class WorkflowExecutor {
 
   async start() {
     this.logger.info('Workflow executor started', { dir: this.dir });
-    this.runLoop().catch(err => {
-      this.logger.error('Workflow executor failed', { error: err.message, stack: err.stack });
+    this.runLoop().catch(error => {
+      this.logger.error('Workflow executor failed', { error: error.message, stack: error.stack });
       this.status = 'Failed';
     });
   }
@@ -110,9 +110,9 @@ export class WorkflowExecutor {
           this.tokenUsage.total += decision.tokens.total;
 
           if (decision.action === 'next') {
-            newlyCompleted.forEach(t => {
+            for (const t of newlyCompleted) {
               this.recentTasks.unshift(t.description);
-            });
+            }
             if (this.recentTasks.length > 5) {
               this.recentTasks.length = 5;
             }
@@ -141,14 +141,16 @@ export class WorkflowExecutor {
                 attempt: retries,
                 nextRetryIn: `${decision.delayMs / 1000}s`
               });
-            } else {
-              this.logger.warn('Agent loop failed, retrying...', { 
-                exitCode: result.exitCode, 
-                attempt: retries,
-                nextRetryIn: `${decision.delayMs / 1000}s`,
-                output: result.logs
-              });
+              await this.delay(decision.delayMs);
+              continue;
             }
+            
+            this.logger.warn('Agent loop failed, retrying...', { 
+              exitCode: result.exitCode, 
+              attempt: retries,
+              nextRetryIn: `${decision.delayMs / 1000}s`,
+              output: result.logs
+            });
             await this.delay(decision.delayMs);
             continue;
           }
@@ -159,23 +161,27 @@ export class WorkflowExecutor {
               output: result.logs
             });
             this.status = 'Failed: Safety Block';
-          } else if (error.type === 'NoProgress') {
+            break;
+          }
+          
+          if (error.type === 'NoProgress') {
             this.logger.error('Agent reported no progress', {
               output: result.logs
             });
             this.status = 'Failed: No Progress';
-          } else {
-            this.logger.error('Agent loop failed after max retries', { 
-              exitCode: result.exitCode,
-              output: result.logs,
-              error: error.message
-            });
-            this.status = 'Failed';
+            break;
           }
+          
+          this.logger.error('Agent loop failed after max retries', { 
+            exitCode: result.exitCode,
+            output: result.logs,
+            error: error.message
+          });
+          this.status = 'Failed';
           break;
-        } catch (err: any) {
+        } catch (error: any) {
           const decision = this.analyzer.analyze(
-            err.message,
+            error.message,
             -1,
             retries,
             0
@@ -184,7 +190,7 @@ export class WorkflowExecutor {
           if (decision.action === 'retry') {
             retries++;
             this.logger.error('Runtime error, retrying...', { 
-              error: err.message,
+              error: error.message,
               attempt: retries,
               nextRetryIn: `${decision.delayMs / 1000}s`
             });
@@ -193,7 +199,7 @@ export class WorkflowExecutor {
           }
 
           this.logger.error('Runtime error after max retries', { 
-            error: err.message 
+            error: error.message 
           });
           this.status = 'Failed';
           break;

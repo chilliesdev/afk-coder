@@ -1,6 +1,6 @@
-import * as net from 'net';
-import * as fs from 'fs';
-import * as child_process from 'child_process';
+import * as net from 'node:net';
+import * as fs from 'node:fs';
+import * as child_process from 'node:child_process';
 import { WorkflowManager } from './workflow-manager';
 import { DaemonResponse } from '../common/types';
 import { ConfigManager } from '../common/config';
@@ -43,14 +43,14 @@ if (!SOCKET_PATH) {
 if (fs.existsSync(SOCKET_PATH)) {
   try {
     fs.unlinkSync(SOCKET_PATH);
-  } catch (err: any) {
-    if (err.code === 'EPERM' || err.code === 'EACCES') {
-      console.error(`Error: ${err.code}: operation not permitted, unlink '${SOCKET_PATH}'`);
+  } catch (error: any) {
+    if (error.code === 'EPERM' || error.code === 'EACCES') {
+      console.error(`Error: ${error.code}: operation not permitted, unlink '${SOCKET_PATH}'`);
       console.error('The socket might be owned by another user.');
       console.error('Use --socket <path> or AFK_CODER_SOCKET env var to specify a different path.');
       process.exit(1);
     }
-    throw err;
+    throw error;
   }
 }
 
@@ -61,18 +61,21 @@ const server = net.createServer((socket) => {
       let response: DaemonResponse;
 
       switch (request.command) {
-        case 'init':
+        case 'init': {
           const initResult = await agent.generateTasks(request.args.dir, request.args.prd, request.args.force, request.args.configDir);
           response = { success: initResult.success, message: initResult.error, data: initResult.logs };
           break;
-        case 'start':
+        }
+        case 'start': {
           const workflow = await workflowManager.startWorkflow(request.args.name, request.args.dir, request.args.configDir);
           response = { success: true, data: workflow };
           break;
-        case 'list':
+        }
+        case 'list': {
           response = { success: true, data: workflowManager.listWorkflows() };
           break;
-        case 'status':
+        }
+        case 'status': {
           const wf = workflowManager.getWorkflow(request.args.name);
           if (!wf) {
             response = { success: false, message: `Workflow ${request.args.name} not found` };
@@ -80,27 +83,32 @@ const server = net.createServer((socket) => {
           }
           response = { success: true, data: wf };
           break;
-        case 'kill':
+        }
+        case 'kill': {
           await workflowManager.killWorkflow(request.args.name);
           response = { success: true, message: `Killed ${request.args.name}` };
           break;
-        case 'remove':
+        }
+        case 'remove': {
           workflowManager.removeWorkflow(request.args.name);
           response = { success: true, message: `Removed ${request.args.name}` };
           break;
-        case 'logs':
+        }
+        case 'logs': {
           response = { success: true, data: workflowManager.getLogs(request.args.name, {
-            tail: request.args.tail ? parseInt(request.args.tail) : undefined,
-            offset: request.args.offset !== undefined ? parseInt(request.args.offset) : undefined
+            tail: request.args.tail ? Number.parseInt(request.args.tail) : undefined,
+            offset: request.args.offset === undefined ? undefined : Number.parseInt(request.args.offset)
           }) };
           break;
-        default:
+        }
+        default: {
           response = { success: false, message: 'Unknown command' };
+        }
       }
 
       socket.write(JSON.stringify(response));
-    } catch (err: any) {
-      socket.write(JSON.stringify({ success: false, message: err.message }));
+    } catch (error: any) {
+      socket.write(JSON.stringify({ success: false, message: error.message }));
     } finally {
       socket.end();
     }
@@ -118,25 +126,28 @@ server.listen(SOCKET_PATH, () => {
       try {
         // Try to get GID for the group
         const gid = child_process.execSync(`getent group ${socketGroup} | cut -d: -f3`, { encoding: 'utf8' }).trim();
-        if (gid) {
-          const uid = process.getuid ? process.getuid() : 0;
-          fs.chownSync(SOCKET_PATH, uid, parseInt(gid));
-          console.log(`Socket group ownership set to ${socketGroup} (${gid})`);
-        } else if (socketGroup === 'afk-coder-users') {
-          console.log(`Group ${socketGroup} not found. Skipping socket group ownership change (this is expected in development).`);
-        } else {
-          console.warn(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
+        if (!gid) {
+          if (socketGroup === 'afk-coder-users') {
+            console.log(`Group ${socketGroup} not found. Skipping socket group ownership change (this is expected in development).`);
+          } else {
+            console.warn(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
+          }
+          return;
         }
-      } catch (err: any) {
+        
+        const uid = process.getuid ? process.getuid() : 0;
+        fs.chownSync(SOCKET_PATH, uid, Number.parseInt(gid));
+        console.log(`Socket group ownership set to ${socketGroup} (${gid})`);
+      } catch (error: any) {
         if (socketGroup === 'afk-coder-users') {
           console.log(`Group ${socketGroup} not found or could not be queried. Skipping socket group ownership change.`);
-        } else {
-          console.warn(`Failed to set socket group ownership to ${socketGroup}: ${err.message}`);
+          return;
         }
+        console.warn(`Failed to set socket group ownership to ${socketGroup}: ${error.message}`);
       }
     }
-  } catch (err: any) {
-    console.warn(`Failed to set socket permissions/ownership: ${err.message}`);
+  } catch (error: any) {
+    console.warn(`Failed to set socket permissions/ownership: ${error.message}`);
   }
 });
 

@@ -1,4 +1,4 @@
-import * as net from 'net';
+import * as net from 'node:net';
 import { DaemonResponse } from '../common/types';
 import { ConfigManager } from '../common/config';
 
@@ -33,7 +33,7 @@ export class DaemonClient {
       client.on('end', () => {
         try {
           resolve(JSON.parse(responseData));
-        } catch (err) {
+        } catch {
           reject(new Error('Failed to parse daemon response'));
         }
       });
