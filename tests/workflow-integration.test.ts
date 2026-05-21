@@ -36,9 +36,9 @@ describe('WorkflowManager Integration', () => {
     // We don't need to mock wait manually, MockRuntime handles it.
     // But we need to make sure tasks.md is updated so the loop finishes.
     
-    const workflow = await workflowManager.startWorkflow('test-workflow', testDir);
-    expect(workflow.status).toMatch(/^Running/);
-    expect(workflow.name).toBe('test-workflow');
+    const workflowInit = await workflowManager.startWorkflow('test-workflow', testDir);
+    expect(workflowInit.status).toMatch(/^Running/);
+    expect(workflowInit.name).toBe('test-workflow');
 
     // Simulate agent marking task as done
     // In a real integration test, the agent would do this. 
@@ -56,8 +56,10 @@ describe('WorkflowManager Integration', () => {
     };
 
     let attempts = 0;
+    let workflow = workflowManager.getWorkflow('test-workflow')!;
     while (workflow.status !== 'Done' && workflow.status !== 'Failed' && attempts < 60) {
       await new Promise(resolve => setTimeout(resolve, 500));
+      workflow = workflowManager.getWorkflow('test-workflow')!;
       attempts++;
     }
 

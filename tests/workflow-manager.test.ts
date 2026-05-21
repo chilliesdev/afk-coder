@@ -60,22 +60,21 @@ describe('WorkflowManager', () => {
       return await originalReconcile();
     };
 
-    const workflow = await workflowManager.startWorkflow('test', testDir);
+    await workflowManager.startWorkflow('test', testDir);
     
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     // Wait for it to finish by advancing timers and flushing promises
     let attempts = 0;
-    while (workflow.status !== 'Done' && attempts < 100) {
+    let workflow = workflowManager.getWorkflow('test');
+    while (workflow && workflow.status !== 'Done' && attempts < 100) {
       await jest.advanceTimersByTimeAsync(5000);
       await flushPromises();
+      workflow = workflowManager.getWorkflow('test');
       attempts++;
     }
 
-    if (workflow.status !== 'Done') {
-      console.log('Workflow Status:', workflow.status);
-      console.log('Logs:', workflowManager.getLogs('test').content);
-    }
+    workflow = workflowManager.getWorkflow('test')!;
     expect(workflow.status).toBe('Done');
     expect(workflow.tokenUsage).toEqual({ input: 10, output: 20, total: 30 });
     expect(workflow.recentTasks).toContain('Task 1');
@@ -89,7 +88,7 @@ describe('WorkflowManager', () => {
       logs: 'Error: 429 Too Many Requests'
     };
 
-    const workflow = await workflowManager.startWorkflow('test-quota', testDir);
+    await workflowManager.startWorkflow('test-quota', testDir);
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     // Wait for it to detect quota error
@@ -114,12 +113,13 @@ describe('WorkflowManager', () => {
       logs: 'Candidate was blocked due to safety'
     };
 
-    const workflow = await workflowManager.startWorkflow('test-safety', testDir);
+    await workflowManager.startWorkflow('test-safety', testDir);
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     await jest.advanceTimersByTimeAsync(5000);
     await flushPromises();
 
+    const workflow = workflowManager.getWorkflow('test-safety')!;
     expect(workflow.status).toBe('Failed: Safety Block');
     await workflowManager.killWorkflow('test-safety');
   });
@@ -133,7 +133,7 @@ describe('WorkflowManager', () => {
       logs: 'Error: 429 Too Many Requests'
     };
 
-    const workflow = await workflowManager.startWorkflow('complex', testDir);
+    await workflowManager.startWorkflow('complex', testDir);
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     // Wait for it to detect quota error
@@ -177,14 +177,15 @@ describe('WorkflowManager', () => {
 
     // Wait for Task 1 to be processed
     let task1Attempts = 0;
+    let workflow = workflowManager.getWorkflow('complex')!;
     while (!workflow.recentTasks.includes('Task 1') && task1Attempts < 100) {
       await jest.advanceTimersByTimeAsync(1000);
       await flushPromises();
+      workflow = workflowManager.getWorkflow('complex')!;
       task1Attempts++;
     }
 
     expect(workflow.recentTasks).toContain('Task 1');
-    // progress might be 1/2 or 2/2 depending on how fast the loop ran
     expect(['1/2', '2/2']).toContain(workflow.progress);
 
     // Next run completes Task 2 (if not already done)
@@ -198,12 +199,12 @@ describe('WorkflowManager', () => {
     while (workflow.status !== 'Done' && task2Attempts < 100) {
       await jest.advanceTimersByTimeAsync(1000);
       await flushPromises();
+      workflow = workflowManager.getWorkflow('complex')!;
       task2Attempts++;
     }
 
     expect(workflow.status).toBe('Done');
     expect(workflow.recentTasks).toContain('Task 2');
-    // Token usage will be 10/20 if it took 2 runs, or 15/30 if it took 3 runs due to some race condition in tests
     expect(workflow.tokenUsage.input).toBeGreaterThanOrEqual(10);
   });
 });

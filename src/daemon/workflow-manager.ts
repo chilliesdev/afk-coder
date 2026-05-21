@@ -4,24 +4,21 @@ import * as path from 'path';
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
 import { FileSystemTaskStorage } from './task-storage';
-import { AgentOutcomeEvaluator } from './agent-outcome';
+import { OutcomeAnalyzer } from './agent-outcome';
 import { Agent } from './agent';
-
-interface WorkflowRuntime extends Workflow {
-  stopHandle?: () => Promise<void>;
-}
+import { WorkflowExecutor } from './workflow-executor';
 
 export class WorkflowManager {
-  private workflows: Map<string, WorkflowRuntime> = new Map();
+  private workflows: Map<string, WorkflowExecutor> = new Map();
   private loggers: Map<string, winston.Logger> = new Map();
   private agent: Agent;
   private taskBoardFactory: (path: string) => ITaskBoard;
-  private evaluator: AgentOutcomeEvaluator;
+  private evaluator: OutcomeAnalyzer;
 
   constructor(
     agent: Agent, 
     taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p)),
-    evaluator: AgentOutcomeEvaluator = new AgentOutcomeEvaluator()
+    evaluator: OutcomeAnalyzer = new OutcomeAnalyzer()
   ) {
     this.agent = agent;
     this.taskBoardFactory = taskBoardFactory;
@@ -49,9 +46,9 @@ export class WorkflowManager {
     return logger;
   }
 
-  async startWorkflow(name: string, dir: string, configDir?: string) {
+  async startWorkflow(name: string, dir: string, configDir?: string): Promise<Workflow> {
     const existing = this.workflows.get(name);
-    if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed')) {
+    if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed') && existing.status !== 'Killed') {
       throw new Error(`Workflow ${name} is already running`);
     }
 
@@ -71,225 +68,57 @@ export class WorkflowManager {
 
     const taskBoard = this.taskBoardFactory(tasksPath);
     const boardState = await taskBoard.load();
-    
-    const progress = boardState.progress;
     const pendingTasks = boardState.pendingTasks;
 
     if (pendingTasks.length === 0) {
       throw new Error(`No pending tasks found in tasks.md in ${dir}`);
     }
 
-    const workflow: WorkflowRuntime = {
+    const logger = this.getOrCreateLogger(name, dir);
+    const executor = new WorkflowExecutor(
       name,
       dir,
-      uptime: Date.now(),
-      progress: `${progress.completed}/${progress.total}`,
-      status: 'Running',
-      tokenUsage: { input: 0, output: 0, total: 0 },
-      recentTasks: [],
+      this.agent,
+      taskBoard,
+      logger,
       configDir,
-    };
-    this.workflows.set(name, workflow);
+      this.evaluator
+    );
 
-    const logger = this.getOrCreateLogger(name, dir);
+    this.workflows.set(name, executor);
     logger.info('Workflow started', { dir });
+    
+    // Start running the loop asynchronously
+    executor.start();
 
-    this.runWorkflowLoop(workflow).catch(err => {
-      logger.error('Workflow failed', { error: err.message, stack: err.stack });
-      workflow.status = 'Failed';
-    });
-
-    return workflow;
-  }
-
-  private async runWorkflowLoop(workflow: WorkflowRuntime) {
-    const tasksPath = path.join(workflow.dir, 'tasks.md');
-    const taskBoard = this.taskBoardFactory(tasksPath);
-    const logger = this.getOrCreateLogger(workflow.name, workflow.dir);
-
-    while (workflow.status !== 'Failed' && workflow.status !== 'Done') {
-      const boardState = await taskBoard.load();
-      const pendingTasks = boardState.pendingTasks;
-      const progress = boardState.progress;
-
-      workflow.progress = `${progress.completed}/${progress.total}`;
-
-      if (pendingTasks.length === 0) {
-        logger.info('All tasks completed');
-        workflow.status = 'Done';
-        break;
-      }
-
-      workflow.status = `Running: Autonomous Agent Loop`;
-      workflow.currentTask = 'Autonomous Task Selection';
-
-      let retries = 0;
-      let success = false;
-
-      while (!success && workflow.status.startsWith('Running')) {
-        try {
-          const run = await this.agent.runAutonomousLoop(workflow.dir, workflow.configDir);
-          
-          workflow.pid = run.pid;
-          workflow.stopHandle = run.stop;
-          
-          logger.info('Running agent loop', { 
-            prompt: run.prompt 
-          });
-
-          const result = await run.wait();
-          workflow.pid = undefined;
-          workflow.stopHandle = undefined;
-
-          if (workflow.status === 'Done' || !workflow.status.startsWith('Running')) {
-            // Workflow was killed or completed while waiting
-            break;
-          }
-
-          // Call deep evaluator
-          const decision = await this.evaluator.evaluate(
-            result.logs,
-            result.exitCode,
-            retries,
-            taskBoard
-          );
-
-          // Update global token usage
-          workflow.tokenUsage.input += decision.tokens.input;
-          workflow.tokenUsage.output += decision.tokens.output;
-          workflow.tokenUsage.total += decision.tokens.total;
-
-          if (decision.action === 'next') {
-            const newlyCompletedTasks = decision.newlyCompleted || [];
-            // Update task tracking
-            newlyCompletedTasks.forEach(t => {
-              workflow.recentTasks.unshift(t.description);
-            });
-            if (workflow.recentTasks.length > 5) {
-              workflow.recentTasks.length = 5;
-            }
-            const updatedState = await taskBoard.load();
-            workflow.currentTask = undefined;
-            workflow.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
-
-            logger.info('Tasks completed successfully', { 
-              completedTasks: newlyCompletedTasks.map(t => t.description), 
-              exitCode: result.exitCode,
-              output: result.logs,
-              tokenUsage: decision.tokens,
-              workflowTokenUsage: workflow.tokenUsage
-            });
-
-            success = true;
-            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
-          } else if (decision.action === 'retry') {
-            retries++;
-            const error = decision.error!;
-            if (error.type === 'Quota') {
-              logger.warn('Gemini API quota exceeded, waiting longer...', {
-                attempt: retries,
-                nextRetryIn: `${decision.delayMs / 1000}s`
-              });
-            } else {
-              logger.warn('Agent loop failed, retrying...', { 
-                exitCode: result.exitCode, 
-                attempt: retries,
-                nextRetryIn: `${decision.delayMs / 1000}s`,
-                output: result.logs
-              });
-            }
-            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
-          } else {
-            // action === 'fail'
-            const error = decision.error!;
-            if (error.type === 'Safety') {
-              logger.error('Task blocked by safety filters', {
-                output: result.logs
-              });
-              workflow.status = 'Failed: Safety Block';
-            } else if (error.type === 'NoProgress') {
-              logger.error('Agent reported no progress', {
-                output: result.logs
-              });
-              workflow.status = 'Failed: No Progress';
-            } else {
-              logger.error('Agent loop failed after max retries', { 
-                exitCode: result.exitCode,
-                output: result.logs,
-                error: error.message
-              });
-              workflow.status = 'Failed';
-            }
-            break;
-          }
-        } catch (err: any) {
-          // JS/Runtime level errors (not agent errors)
-          const decision = await this.evaluator.evaluate(
-            err.message,
-            -1, // indicate non-zero exit code
-            retries,
-            taskBoard
-          );
-
-          if (decision.action === 'retry') {
-            retries++;
-            logger.error('Runtime error, retrying...', { 
-              error: err.message,
-              attempt: retries,
-              nextRetryIn: `${decision.delayMs / 1000}s`
-            });
-            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
-          } else {
-            logger.error('Runtime error after max retries', { 
-              error: err.message 
-            });
-            workflow.status = 'Failed';
-            break;
-          }
-        }
-      }
-
-      if (workflow.status === 'Failed' || workflow.status.startsWith('Failed')) break;
-    }
+    return executor.toWorkflow();
   }
 
   listWorkflows(): Workflow[] {
-    return Array.from(this.workflows.values()).map(w => ({
-      ...w,
-      uptime: Date.now() - w.uptime, // Return uptime in ms
-    }));
+    return Array.from(this.workflows.values()).map(w => w.toWorkflow());
   }
 
   getWorkflow(name: string): Workflow | undefined {
     const w = this.workflows.get(name);
     if (!w) return undefined;
-    return {
-      ...w,
-      uptime: Date.now() - w.uptime,
-    };
+    return w.toWorkflow();
   }
 
   async killWorkflow(name: string) {
-    const workflow = this.workflows.get(name);
-    if (!workflow) {
+    const executor = this.workflows.get(name);
+    if (!executor) {
       throw new Error(`Workflow ${name} not found`);
     }
-    const logger = this.getOrCreateLogger(name, workflow.dir);
-    logger.info('Workflow killed by user');
-    workflow.status = 'Killed'; // This will stop the loop
-    if (workflow.stopHandle) {
-      await workflow.stopHandle();
-      workflow.stopHandle = undefined;
-    }
+    await executor.kill();
   }
 
   removeWorkflow(name: string) {
-    const workflow = this.workflows.get(name);
-    if (!workflow) {
+    const executor = this.workflows.get(name);
+    if (!executor) {
       throw new Error(`Workflow ${name} not found`);
     }
 
-    if (workflow.status !== 'Done' && !workflow.status.startsWith('Failed') && workflow.status !== 'Killed') {
+    if (executor.status !== 'Done' && !executor.status.startsWith('Failed') && executor.status !== 'Killed') {
       throw new Error(`Workflow ${name} is still running. Kill it first.`);
     }
 
@@ -298,11 +127,11 @@ export class WorkflowManager {
   }
 
   getLogs(name: string, options: { tail?: number, offset?: number } = {}) {
-    const workflow = this.workflows.get(name);
-    if (!workflow) {
+    const executor = this.workflows.get(name);
+    if (!executor) {
       throw new Error(`Workflow ${name} not found`);
     }
-    const logFile = path.join(workflow.dir, 'workflow.json.log');
+    const logFile = path.join(executor.dir, 'workflow.json.log');
     if (fs.existsSync(logFile)) {
       if (options.offset !== undefined) {
         const stats = fs.statSync(logFile);
@@ -327,5 +156,3 @@ export class WorkflowManager {
     return { content: 'No logs found.', nextOffset: 0 };
   }
 }
-
-

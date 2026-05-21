@@ -69,16 +69,19 @@ describe('WorkflowManager Resilience', () => {
 
     jest.useFakeTimers();
 
-    const workflow = await workflowManager.startWorkflow('test-tokens', testDir);
+    await workflowManager.startWorkflow('test-tokens', testDir);
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     let attempts = 0;
-    while (workflow.status !== 'Done' && workflow.status !== 'Failed' && attempts < 100) {
+    let workflow = workflowManager.getWorkflow('test-tokens');
+    while (workflow && workflow.status !== 'Done' && workflow.status !== 'Failed' && attempts < 100) {
       await jest.advanceTimersByTimeAsync(5000);
       await flushPromises();
+      workflow = workflowManager.getWorkflow('test-tokens');
       attempts++;
     }
 
+    workflow = workflowManager.getWorkflow('test-tokens')!;
     expect(workflow.status).toBe('Done');
     
     const logOutput = workflowManager.getLogs('test-tokens');
@@ -115,7 +118,7 @@ describe('WorkflowManager Resilience', () => {
 
     jest.useFakeTimers();
 
-    const workflow = await workflowManager.startWorkflow('test-429', testDir);
+    await workflowManager.startWorkflow('test-429', testDir);
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
 
     let attempts = 0;
@@ -139,12 +142,15 @@ describe('WorkflowManager Resilience', () => {
     expect(callCount).toBe(2);
 
     attempts = 0;
-    while (workflow.status !== 'Done' && attempts < 100) {
+    let workflow = workflowManager.getWorkflow('test-429');
+    while (workflow && workflow.status !== 'Done' && attempts < 100) {
         await jest.advanceTimersByTimeAsync(5000);
         await flushPromises();
+        workflow = workflowManager.getWorkflow('test-429');
         attempts++;
     }
 
+    workflow = workflowManager.getWorkflow('test-429')!;
     expect(workflow.status).toBe('Done');
     
     const logOutput = workflowManager.getLogs('test-429');

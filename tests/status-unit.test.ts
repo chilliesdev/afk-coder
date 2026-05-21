@@ -54,25 +54,30 @@ describe('WorkflowManager Status Updates', () => {
       return handle;
     };
 
-    const workflow = await workflowManager.startWorkflow('test-wf', testDir);
+    await workflowManager.startWorkflow('test-wf', testDir);
     
+    let workflow = workflowManager.getWorkflow('test-wf')!;
     // Initial check
     expect(workflow.tokenUsage).toEqual({ input: 0, output: 0, total: 0 });
     expect(workflow.recentTasks).toEqual([]);
     
     // Wait for first task to start
-    while (!workflow.currentTask && workflow.status !== 'Done') {
+    workflow = workflowManager.getWorkflow('test-wf')!;
+    while (workflow && !workflow.currentTask && workflow.status !== 'Done') {
       await new Promise(resolve => setTimeout(resolve, 10));
+      workflow = workflowManager.getWorkflow('test-wf')!;
     }
     expect(workflow.currentTask).toBe('Autonomous Task Selection');
 
     // Wait for tasks to complete
     let attempts = 0;
-    while (workflow.status !== 'Done' && attempts < 200) {
+    while (workflow && workflow.status !== 'Done' && attempts < 200) {
       await new Promise(resolve => setTimeout(resolve, 500));
+      workflow = workflowManager.getWorkflow('test-wf')!;
       attempts++;
     }
 
+    workflow = workflowManager.getWorkflow('test-wf')!;
     if (workflow.status !== 'Done') {
       const logFile = path.join(testDir, 'workflow.json.log');
       if (fs.existsSync(logFile)) {
