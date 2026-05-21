@@ -23,6 +23,7 @@ export interface ExecutionDecision {
   action: WorkflowAction;
   delayMs: number;
   tokens: TokenUsage;
+  newlyCompleted?: Task[];
   error?: AgentError;
 }
 

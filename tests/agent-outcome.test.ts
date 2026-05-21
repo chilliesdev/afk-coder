@@ -75,17 +75,30 @@ Done!
 
 describe('AgentOutcomeEvaluator', () => {
   let evaluator: AgentOutcomeEvaluator;
+  const makeMockTaskBoard = (newlyCompleted: any[] = []): any => ({
+    load: jest.fn(),
+    reconcile: jest.fn().mockResolvedValue({
+      newlyCompleted,
+      state: {
+        progress: { completed: 0, total: 0, percentage: '0%' },
+        pendingTasks: [],
+        tasks: []
+      }
+    }),
+    getTasks: jest.fn()
+  });
 
   beforeEach(() => {
     evaluator = new AgentOutcomeEvaluator(3);
   });
 
-  it('should return action next when exit code is 0 and new tasks are completed', () => {
-    const decision = evaluator.evaluate(
+  it('should return action next when exit code is 0 and new tasks are completed', async () => {
+    const taskBoard = makeMockTaskBoard([{ completed: true, description: 'Task 1' }]);
+    const decision = await evaluator.evaluate(
       'Tokens: 100 prompt, 50 completion',
       0,
       0,
-      true
+      taskBoard
     );
     expect(decision.action).toBe('next');
     expect(decision.delayMs).toBe(5000);
@@ -94,68 +107,74 @@ describe('AgentOutcomeEvaluator', () => {
     expect(decision.error).toBeUndefined();
   });
 
-  it('should return action fail with NoProgress error when exit code is 0 but no tasks are completed', () => {
-    const decision = evaluator.evaluate(
+  it('should return action fail with NoProgress error when exit code is 0 but no tasks are completed', async () => {
+    const taskBoard = makeMockTaskBoard([]);
+    const decision = await evaluator.evaluate(
       'Tokens: 100 prompt, 50 completion',
       0,
       0,
-      false
+      taskBoard
     );
     expect(decision.action).toBe('fail');
     expect(decision.error?.type).toBe('NoProgress');
     expect(decision.error?.message).toContain('no progress');
   });
 
-  it('should return action fail immediately for Safety errors', () => {
-    const decision = evaluator.evaluate(
+  it('should return action fail immediately for Safety errors', async () => {
+    const taskBoard = makeMockTaskBoard([]);
+    const decision = await evaluator.evaluate(
       'Candidate was blocked due to safety reasons.',
       1,
       0,
-      false
+      taskBoard
     );
     expect(decision.action).toBe('fail');
     expect(decision.error?.type).toBe('Safety');
   });
 
-  it('should return action fail immediately for NoProgress errors in logs', () => {
-    const decision = evaluator.evaluate(
+  it('should return action fail immediately for NoProgress errors in logs', async () => {
+    const taskBoard = makeMockTaskBoard([]);
+    const decision = await evaluator.evaluate(
       'I am stuck. No progress could be made.',
       1,
       0,
-      false
+      taskBoard
     );
     expect(decision.action).toBe('fail');
     expect(decision.error?.type).toBe('NoProgress');
   });
 
-  it('should retry for Quota errors with minimum 60s wait', () => {
-    const decision = evaluator.evaluate(
+  it('should retry for Quota errors with minimum 60s wait', async () => {
+    const taskBoard = makeMockTaskBoard([]);
+    const decision = await evaluator.evaluate(
       'Error: 429 Too Many Requests. Quota exceeded.',
       1,
       0,
-      false
+      taskBoard
     );
     expect(decision.action).toBe('retry');
     expect(decision.error?.type).toBe('Quota');
     expect(decision.delayMs).toBe(60000);
   });
 
-  it('should calculate exponential backoff for retriable errors', () => {
-    const d1 = evaluator.evaluate('Runtime error', 1, 0, false);
+  it('should calculate exponential backoff for retriable errors', async () => {
+    const taskBoard = makeMockTaskBoard([]);
+    const d1 = await evaluator.evaluate('Runtime error', 1, 0, taskBoard);
     expect(d1.action).toBe('retry');
     expect(d1.delayMs).toBe(10000);
 
-    const d2 = evaluator.evaluate('Runtime error', 1, 1, false);
+    const d2 = await evaluator.evaluate('Runtime error', 1, 1, taskBoard);
     expect(d2.action).toBe('retry');
     expect(d2.delayMs).toBe(20000);
 
-    const d3 = evaluator.evaluate('Runtime error', 1, 2, false);
+    const d3 = await evaluator.evaluate('Runtime error', 1, 2, taskBoard);
     expect(d3.action).toBe('retry');
     expect(d3.delayMs).toBe(40000);
   });
 
-  it('should return action fail when max retries are exceeded', () => {
-    const decision = evaluator.evaluate('Runtime error', 1, 3, false);
+  it('should return action fail when max retries are exceeded', async () => {
+    const taskBoard = makeMockTaskBoard([]);
+    const decision = await evaluator.evaluate('Runtime error', 1, 3, taskBoard);
     expect(decision.action).toBe('fail');
     expect(decision.error?.type).toBe('Runtime');
   });

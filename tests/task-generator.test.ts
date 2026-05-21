@@ -1,15 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { TaskGenerator } from '../src/daemon/task-generator';
+import { Agent } from '../src/daemon/agent';
 import { MockRuntime } from './mocks/mock-runtime';
-import { AgentStrategy } from '../src/daemon/agent-strategy';
 
 const TEST_DIR = path.resolve('./test-task-generator');
 
-describe('TaskGenerator', () => {
+describe('Agent Task Generation', () => {
   let mockRuntime: MockRuntime;
-  let strategy: AgentStrategy;
-  let taskGenerator: TaskGenerator;
+  let agent: Agent;
 
   beforeEach(() => {
     if (fs.existsSync(TEST_DIR)) {
@@ -17,8 +15,7 @@ describe('TaskGenerator', () => {
     }
     fs.mkdirSync(TEST_DIR);
     mockRuntime = new MockRuntime();
-    strategy = new AgentStrategy();
-    taskGenerator = new TaskGenerator(mockRuntime, strategy);
+    agent = new Agent(mockRuntime);
   });
 
   afterEach(() => {
@@ -46,7 +43,7 @@ describe('TaskGenerator', () => {
       return handle;
     };
 
-    const res = await taskGenerator.generate(TEST_DIR, 'PRD.md');
+    const res = await agent.generateTasks(TEST_DIR, 'PRD.md');
     expect(res.success).toBe(true);
     expect(res.logs).toContain('Successfully generated tasks.md');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] Generated Task 1');
@@ -59,7 +56,7 @@ describe('TaskGenerator', () => {
       logs: 'Logs\n- [ ] Task from stdout 1\n- [ ] Task from stdout 2'
     };
 
-    const res = await taskGenerator.generate(TEST_DIR, 'PRD.md');
+    const res = await agent.generateTasks(TEST_DIR, 'PRD.md');
     expect(res.success).toBe(true);
     expect(res.logs).toContain('from stdout');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] Task from stdout 1\n- [ ] Task from stdout 2');
@@ -72,14 +69,14 @@ describe('TaskGenerator', () => {
       logs: 'Fatal Sandbox Error'
     };
 
-    const res = await taskGenerator.generate(TEST_DIR, 'PRD.md');
+    const res = await agent.generateTasks(TEST_DIR, 'PRD.md');
     expect(res.success).toBe(false);
     expect(res.error).toContain('Exit code 1');
     expect(fs.existsSync(path.join(TEST_DIR, 'tasks.md'))).toBe(false);
   });
 
   it('should fail if PRD.md does not exist', async () => {
-    const res = await taskGenerator.generate(TEST_DIR, 'PRD.md');
+    const res = await agent.generateTasks(TEST_DIR, 'PRD.md');
     expect(res.success).toBe(false);
     expect(res.error).toContain('PRD.md not found');
   });
@@ -88,7 +85,7 @@ describe('TaskGenerator', () => {
     fs.writeFileSync(path.join(TEST_DIR, 'PRD.md'), '# PRD Content');
     fs.writeFileSync(path.join(TEST_DIR, 'tasks.md'), '- [x] Existing Task');
 
-    const res = await taskGenerator.generate(TEST_DIR, 'PRD.md', false);
+    const res = await agent.generateTasks(TEST_DIR, 'PRD.md', false);
     expect(res.success).toBe(false);
     expect(res.error).toContain('already exists');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [x] Existing Task');
@@ -103,7 +100,7 @@ describe('TaskGenerator', () => {
       logs: 'Logs\n- [ ] New Task'
     };
 
-    const res = await taskGenerator.generate(TEST_DIR, 'PRD.md', true);
+    const res = await agent.generateTasks(TEST_DIR, 'PRD.md', true);
     expect(res.success).toBe(true);
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] New Task');
   });

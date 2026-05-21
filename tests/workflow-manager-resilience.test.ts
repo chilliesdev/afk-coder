@@ -2,12 +2,11 @@ import { WorkflowManager } from '../src/daemon/workflow-manager';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MockRuntime } from './mocks/mock-runtime';
-import { AgentStrategy } from '../src/daemon/agent-strategy';
+import { Agent } from '../src/daemon/agent';
 
 describe('WorkflowManager Resilience', () => {
   let workflowManager: WorkflowManager;
   let mockRuntime: MockRuntime;
-  let strategy: AgentStrategy;
   const baseTestDir = path.resolve('./test-resilience');
 
   beforeEach(() => {
@@ -17,8 +16,7 @@ describe('WorkflowManager Resilience', () => {
     fs.mkdirSync(baseTestDir);
 
     mockRuntime = new MockRuntime();
-    strategy = new AgentStrategy();
-    workflowManager = new WorkflowManager(mockRuntime, strategy);
+    workflowManager = new WorkflowManager(new Agent(mockRuntime));
   });
 
   afterEach(() => {

@@ -2,12 +2,11 @@ import { WorkflowManager } from '../src/daemon/workflow-manager';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MockRuntime } from './mocks/mock-runtime';
-import { AgentStrategy } from '../src/daemon/agent-strategy';
+import { Agent } from '../src/daemon/agent';
 
 describe('WorkflowManager Status Updates', () => {
   let workflowManager: WorkflowManager;
   let mockRuntime: MockRuntime;
-  let strategy: AgentStrategy;
   const testDir = path.resolve('./test-status-unit');
 
   beforeEach(() => {
@@ -20,8 +19,7 @@ describe('WorkflowManager Status Updates', () => {
 
     mockRuntime = new MockRuntime();
     mockRuntime.runDelay = 100;
-    strategy = new AgentStrategy();
-    workflowManager = new WorkflowManager(mockRuntime, strategy);
+    workflowManager = new WorkflowManager(new Agent(mockRuntime));
   });
 
   afterEach(() => {

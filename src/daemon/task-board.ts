@@ -1,14 +1,14 @@
-import * as fs from 'fs';
 import { Task, TaskBoard as ITaskBoard, TaskBoardState } from '../common/types';
 import { parseTasks, validateTasks } from '../common/validation';
+import { TaskBoardStorage } from './task-storage';
 
 export class TaskBoard implements ITaskBoard {
   private tasks: Task[] = [];
   private baseline: Task[] = [];
-  private tasksPath: string;
+  private storage: TaskBoardStorage;
 
-  constructor(tasksPath: string) {
-    this.tasksPath = tasksPath;
+  constructor(storage: TaskBoardStorage) {
+    this.storage = storage;
   }
 
   async load(): Promise<TaskBoardState> {
@@ -39,11 +39,11 @@ export class TaskBoard implements ITaskBoard {
   }
 
   private async sync(): Promise<void> {
-    if (!fs.existsSync(this.tasksPath)) {
+    if (!(await this.storage.exists())) {
       this.tasks = [];
       return;
     }
-    const content = fs.readFileSync(this.tasksPath, 'utf-8');
+    const content = await this.storage.read();
     validateTasks(content);
     this.tasks = parseTasks(content);
   }
@@ -60,3 +60,4 @@ export class TaskBoard implements ITaskBoard {
     };
   }
 }
+

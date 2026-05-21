@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
+import { FileSystemTaskStorage } from './task-storage';
 import { AgentOutcomeEvaluator } from './agent-outcome';
-import { ExecutionRuntime } from './execution-runtime';
-import { AgentStrategy } from './agent-strategy';
+import { Agent } from './agent';
 
 interface WorkflowRuntime extends Workflow {
   stopHandle?: () => Promise<void>;
@@ -14,19 +14,16 @@ interface WorkflowRuntime extends Workflow {
 export class WorkflowManager {
   private workflows: Map<string, WorkflowRuntime> = new Map();
   private loggers: Map<string, winston.Logger> = new Map();
-  private runtime: ExecutionRuntime;
-  private strategy: AgentStrategy;
+  private agent: Agent;
   private taskBoardFactory: (path: string) => ITaskBoard;
   private evaluator: AgentOutcomeEvaluator;
 
   constructor(
-    runtime: ExecutionRuntime, 
-    strategy: AgentStrategy, 
-    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(p),
+    agent: Agent, 
+    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p)),
     evaluator: AgentOutcomeEvaluator = new AgentOutcomeEvaluator()
   ) {
-    this.runtime = runtime;
-    this.strategy = strategy;
+    this.agent = agent;
     this.taskBoardFactory = taskBoardFactory;
     this.evaluator = evaluator;
   }
@@ -131,8 +128,7 @@ export class WorkflowManager {
 
       while (!success && workflow.status.startsWith('Running')) {
         try {
-          const prompt = this.strategy.getAutonomousLoopPrompt();
-          const run = await this.runtime.run(prompt, workflow.dir, workflow.configDir);
+          const run = await this.agent.runAutonomousLoop(workflow.dir, workflow.configDir);
           
           workflow.pid = run.pid;
           workflow.stopHandle = run.stop;
@@ -150,23 +146,12 @@ export class WorkflowManager {
             break;
           }
 
-          let hasNewCompletedTasks = false;
-          let newlyCompletedTasks: Task[] = [];
-          let updatedState = boardState;
-
-          if (result.exitCode === 0) {
-            const reconciliation = await taskBoard.reconcile();
-            newlyCompletedTasks = reconciliation.newlyCompleted;
-            updatedState = reconciliation.state;
-            hasNewCompletedTasks = newlyCompletedTasks.length > 0;
-          }
-
           // Call deep evaluator
-          const decision = this.evaluator.evaluate(
+          const decision = await this.evaluator.evaluate(
             result.logs,
             result.exitCode,
             retries,
-            hasNewCompletedTasks
+            taskBoard
           );
 
           // Update global token usage
@@ -175,6 +160,7 @@ export class WorkflowManager {
           workflow.tokenUsage.total += decision.tokens.total;
 
           if (decision.action === 'next') {
+            const newlyCompletedTasks = decision.newlyCompleted || [];
             // Update task tracking
             newlyCompletedTasks.forEach(t => {
               workflow.recentTasks.unshift(t.description);
@@ -182,6 +168,7 @@ export class WorkflowManager {
             if (workflow.recentTasks.length > 5) {
               workflow.recentTasks.length = 5;
             }
+            const updatedState = await taskBoard.load();
             workflow.currentTask = undefined;
             workflow.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
 
@@ -237,11 +224,11 @@ export class WorkflowManager {
           }
         } catch (err: any) {
           // JS/Runtime level errors (not agent errors)
-          const decision = this.evaluator.evaluate(
+          const decision = await this.evaluator.evaluate(
             err.message,
             -1, // indicate non-zero exit code
             retries,
-            false
+            taskBoard
           );
 
           if (decision.action === 'retry') {

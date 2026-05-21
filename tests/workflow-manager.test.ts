@@ -1,16 +1,22 @@
 import { WorkflowManager } from '../src/daemon/workflow-manager';
 import { MockRuntime } from './mocks/mock-runtime';
-import { MockTaskBoard } from './mocks/mock-task-board';
-import { AgentStrategy } from '../src/daemon/agent-strategy';
+import { TaskBoard } from '../src/daemon/task-board';
+import { InMemoryTaskStorage } from '../src/daemon/task-storage';
+import { Agent } from '../src/daemon/agent';
 import * as fs from 'fs';
 import * as path from 'path';
 
 describe('WorkflowManager', () => {
   let workflowManager: WorkflowManager;
   let mockRuntime: MockRuntime;
-  let mockTaskBoard: MockTaskBoard;
-  let strategy: AgentStrategy;
+  let mockTaskBoard: TaskBoard;
+  let inMemoryStorage: InMemoryTaskStorage;
   const testDir = path.resolve('./test-workflow-manager');
+
+  const resetBoard = async (content: string) => {
+    await inMemoryStorage.write(content);
+    await mockTaskBoard.load();
+  };
 
   beforeEach(() => {
     if (fs.existsSync(testDir)) {
@@ -21,12 +27,11 @@ describe('WorkflowManager', () => {
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
 
     mockRuntime = new MockRuntime();
-    mockTaskBoard = new MockTaskBoard();
-    strategy = new AgentStrategy();
+    inMemoryStorage = new InMemoryTaskStorage('- [ ] Task 1');
+    mockTaskBoard = new TaskBoard(inMemoryStorage);
     
     workflowManager = new WorkflowManager(
-      mockRuntime,
-      strategy,
+      new Agent(mockRuntime),
       () => mockTaskBoard
     );
 
@@ -41,20 +46,20 @@ describe('WorkflowManager', () => {
   });
 
   it('should run a simple workflow to completion', async () => {
-    mockTaskBoard.tasks = [
-      { description: 'Task 1', completed: false }
-    ];
+    await resetBoard('- [ ] Task 1');
 
     mockRuntime.nextResult = {
       exitCode: 0,
       logs: 'Success! Tokens: 10 in, 20 out'
     };
-    // Simulate task completion on next reconcile
+    
+    // Simulate task completion on next reconcile by modifying the in-memory storage
     const originalReconcile = mockTaskBoard.reconcile.bind(mockTaskBoard);
     mockTaskBoard.reconcile = async () => {
-      mockTaskBoard.tasks[0].completed = true;
+      await inMemoryStorage.write('- [x] Task 1');
       return await originalReconcile();
     };
+
     const workflow = await workflowManager.startWorkflow('test', testDir);
     
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
@@ -77,9 +82,7 @@ describe('WorkflowManager', () => {
   });
 
   it('should handle quota errors with retries', async () => {
-    mockTaskBoard.tasks = [
-      { description: 'Task 1', completed: false }
-    ];
+    await resetBoard('- [ ] Task 1');
 
     mockRuntime.nextResult = {
       exitCode: 1,
@@ -104,9 +107,7 @@ describe('WorkflowManager', () => {
   });
 
   it('should handle safety blocks', async () => {
-    mockTaskBoard.tasks = [
-      { description: 'Task 1', completed: false }
-    ];
+    await resetBoard('- [ ] Task 1');
 
     mockRuntime.nextResult = {
       exitCode: 1,
@@ -124,10 +125,7 @@ describe('WorkflowManager', () => {
   });
 
   it('should handle multiple tasks and recover from errors', async () => {
-    mockTaskBoard.tasks = [
-      { description: 'Task 1', completed: false },
-      { description: 'Task 2', completed: false }
-    ];
+    await resetBoard('- [ ] Task 1\n- [ ] Task 2');
 
     // First run fails with Quota
     mockRuntime.nextResult = {
@@ -160,10 +158,13 @@ describe('WorkflowManager', () => {
       handle.wait = async () => {
         const result = await originalWait();
         if (result.exitCode === 0) {
-           const pending = mockTaskBoard.getPendingTasks();
-           if (pending.length > 0) {
-             pending[0].completed = true;
+           const tasks = mockTaskBoard.getTasks();
+           const pending = tasks.find(t => !t.completed);
+           if (pending) {
+             pending.completed = true;
            }
+           const updatedContent = tasks.map(t => `${t.completed ? '- [x]' : '- [ ]'} ${t.description}`).join('\n');
+           await inMemoryStorage.write(updatedContent);
         }
         return result;
       };

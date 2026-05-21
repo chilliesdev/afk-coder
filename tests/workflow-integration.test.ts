@@ -2,12 +2,11 @@ import { WorkflowManager } from '../src/daemon/workflow-manager';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MockRuntime } from './mocks/mock-runtime';
-import { AgentStrategy } from '../src/daemon/agent-strategy';
+import { Agent } from '../src/daemon/agent';
 
 describe('WorkflowManager Integration', () => {
   let workflowManager: WorkflowManager;
   let mockRuntime: MockRuntime;
-  let strategy: AgentStrategy;
   const testDir = path.resolve('./test-workflow');
 
   beforeEach(() => {
@@ -19,8 +18,7 @@ describe('WorkflowManager Integration', () => {
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     
     mockRuntime = new MockRuntime();
-    strategy = new AgentStrategy();
-    workflowManager = new WorkflowManager(mockRuntime, strategy);
+    workflowManager = new WorkflowManager(new Agent(mockRuntime));
   });
 
   afterEach(() => {

@@ -1,22 +1,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ExecutionRuntime } from './execution-runtime';
-import { AgentStrategy } from './agent-strategy';
+import { ExecutionRuntime, RuntimeHandle } from './execution-runtime';
 
-export class TaskGenerator {
-  private runtime: ExecutionRuntime;
-  private strategy: AgentStrategy;
+export class Agent {
+  constructor(private readonly runtime: ExecutionRuntime) {}
 
-  constructor(runtime: ExecutionRuntime, strategy: AgentStrategy) {
-    this.runtime = runtime;
-    this.strategy = strategy;
+  /**
+   * Runs the autonomous agent loop in the specified workspace directory.
+   */
+  async runAutonomousLoop(dir: string, configDir?: string): Promise<RuntimeHandle> {
+    const prompt = this.getAutonomousLoopPrompt();
+    return this.runtime.run(prompt, dir, configDir);
   }
 
   /**
    * Generates tasks.md from a PRD file using the execution runtime.
-   * Runs as a synchronous IPC action.
    */
-  async generate(
+  async generateTasks(
     dir: string,
     prdFilename: string,
     force?: boolean,
@@ -42,7 +42,7 @@ export class TaskGenerator {
     }
 
     try {
-      const prompt = this.strategy.getTaskGenerationPrompt(prdFilename);
+      const prompt = this.getTaskGenerationPrompt(prdFilename);
       const run = await this.runtime.run(prompt, resolvedDir, configDir);
       const result = await run.wait();
 
@@ -81,5 +81,19 @@ export class TaskGenerator {
       }
       return { success: false, error: err.message };
     }
+  }
+
+  /**
+   * Returns the prompt for the autonomous agent loop.
+   */
+  private getAutonomousLoopPrompt(): string {
+    return `gemini --yolo --prompt "Open tasks.md and identify the highest priority uncompleted task (marked with '- [ ]'). Your objective is to implement the necessary code for this task. Explore the codebase, write the code, and thoroughly verify your changes. Once completed and verified, open tasks.md again and mark ONLY that specific task as done by changing '- [ ]' to '- [x]'. Do not work on multiple tasks at once. Exit the session when finished."`;
+  }
+
+  /**
+   * Returns the prompt for generating tasks.md from PRD.md.
+   */
+  private getTaskGenerationPrompt(prdFilename: string): string {
+    return `gemini --yolo --prompt "Read the ${prdFilename} file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \\"- [ ] Task description\\". Do not output the tasks to the console; you must write them directly to the tasks.md file."`;
   }
 }

@@ -1,15 +1,23 @@
-import { Outcome, TokenUsage, AgentError, ExecutionDecision } from '../common/types';
+import { Outcome, TokenUsage, AgentError, ExecutionDecision, TaskBoard as ITaskBoard, Task } from '../common/types';
 
 export class AgentOutcomeEvaluator {
   constructor(private maxRetries: number = 3) {}
 
-  evaluate(
+  async evaluate(
     logs: string,
     exitCode: number,
     currentRetry: number,
-    hasNewCompletedTasks: boolean
-  ): ExecutionDecision {
+    taskBoard: ITaskBoard
+  ): Promise<ExecutionDecision> {
     const tokens = extractTokenUsage(logs);
+    let newlyCompleted: Task[] = [];
+    let hasNewCompletedTasks = false;
+
+    if (exitCode === 0) {
+      const reconciliation = await taskBoard.reconcile();
+      newlyCompleted = reconciliation.newlyCompleted;
+      hasNewCompletedTasks = newlyCompleted.length > 0;
+    }
 
     let error = classifyError(logs, exitCode);
 
@@ -24,7 +32,8 @@ export class AgentOutcomeEvaluator {
       return {
         action: 'next',
         delayMs: 5000,
-        tokens
+        tokens,
+        newlyCompleted
       };
     }
 
@@ -35,6 +44,7 @@ export class AgentOutcomeEvaluator {
         action: 'fail',
         delayMs: 0,
         tokens,
+        newlyCompleted,
         error: resolvedError
       };
     }
@@ -49,6 +59,7 @@ export class AgentOutcomeEvaluator {
         action: 'retry',
         delayMs,
         tokens,
+        newlyCompleted,
         error: resolvedError
       };
     } else {
@@ -56,6 +67,7 @@ export class AgentOutcomeEvaluator {
         action: 'fail',
         delayMs: 0,
         tokens,
+        newlyCompleted,
         error: resolvedError
       };
     }
