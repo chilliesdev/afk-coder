@@ -31,13 +31,17 @@ export async function sendCommand(command: string, args: any = {}): Promise<Daem
     client.on('error', (err: any) => {
       if (err.code === 'ENOENT') {
         reject(new Error(`Daemon is not running. Could not find socket at ${SOCKET_PATH}.\nPlease start it first by running 'afk-coder-daemon'.`));
-      } else if (err.code === 'ECONNREFUSED') {
-        reject(new Error(`Connection refused. The daemon might be frozen or the socket at ${SOCKET_PATH} is stale.\nTry restarting the daemon.`));
-      } else if (err.code === 'EACCES') {
-        reject(new Error(`Permission denied when connecting to ${SOCKET_PATH}.\nCheck socket permissions or run with sufficient privileges.`));
-      } else {
-        reject(new Error(`Daemon connection error (${err.code}): ${err.message}`));
+        return;
       }
+      if (err.code === 'ECONNREFUSED') {
+        reject(new Error(`Connection refused. The daemon might be frozen or the socket at ${SOCKET_PATH} is stale.\nTry restarting the daemon.`));
+        return;
+      }
+      if (err.code === 'EACCES') {
+        reject(new Error(`Permission denied when connecting to ${SOCKET_PATH}.\nCheck socket permissions or run with sufficient privileges.`));
+        return;
+      }
+      reject(new Error(`Daemon connection error (${err.code}): ${err.message}`));
     });
   });
 }

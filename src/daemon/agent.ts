@@ -46,34 +46,34 @@ export class Agent {
       const run = await this.runtime.run(prompt, resolvedDir, configDir);
       const result = await run.wait();
 
-      if (result.exitCode === 0) {
-        if (fs.existsSync(tasksPath)) {
-          const content = fs.readFileSync(tasksPath, 'utf8');
-          if (content.trim() === '') {
-            // If the file is still empty, the sandbox didn't write to it directly.
-            // Let's try to parse stdout.
-            const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
-            if (lines.length > 0) {
-              fs.writeFileSync(tasksPath, lines.join('\n'));
-              return { success: true, logs: 'Successfully generated tasks.md (from stdout)' };
-            } else {
-              // Clean up empty file
-              fs.unlinkSync(tasksPath);
-              return { success: false, error: 'No tasks found in output', logs: result.logs };
-            }
-          } else {
-            return { success: true, logs: 'Successfully generated tasks.md' };
-          }
-        } else {
-          return { success: false, error: 'File disappeared during generation' };
-        }
-      } else {
+      if (result.exitCode !== 0) {
         // Clean up empty file if generation failed
         if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
           fs.unlinkSync(tasksPath);
         }
         return { success: false, error: `Exit code ${result.exitCode}`, logs: result.logs };
       }
+
+      if (!fs.existsSync(tasksPath)) {
+        return { success: false, error: 'File disappeared during generation' };
+      }
+
+      const content = fs.readFileSync(tasksPath, 'utf8');
+      if (content.trim() !== '') {
+        return { success: true, logs: 'Successfully generated tasks.md' };
+      }
+
+      // If the file is still empty, the sandbox didn't write to it directly.
+      // Let's try to parse stdout.
+      const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
+      if (lines.length === 0) {
+        // Clean up empty file
+        fs.unlinkSync(tasksPath);
+        return { success: false, error: 'No tasks found in output', logs: result.logs };
+      }
+
+      fs.writeFileSync(tasksPath, lines.join('\n'));
+      return { success: true, logs: 'Successfully generated tasks.md (from stdout)' };
     } catch (err: any) {
       // Clean up empty file if exception thrown
       if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {

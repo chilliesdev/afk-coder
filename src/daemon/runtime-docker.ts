@@ -155,25 +155,25 @@ export class DockerRuntime implements ExecutionRuntime {
     try {
       await this.docker.getImage(image).inspect();
     } catch (err: any) {
-      if (err.statusCode === 404) {
-        console.log(`Image ${image} not found locally. Pulling...`);
-        await new Promise((resolve, reject) => {
-          this.docker.pull(image, (err: any, stream: any) => {
-            if (err) return reject(err);
-            this.docker.modem.followProgress(stream, (err: any, res: any) => {
-              if (err) return reject(err);
-              resolve(res);
-            }, (event: any) => {
-              // Minimal logging to avoid spamming the console
-              if (event.status && !['Downloading', 'Extracting'].includes(event.status)) {
-                console.log(`Pulling ${image}: ${event.status}`);
-              }
-            });
-          });
-        });
-      } else {
+      if (err.statusCode !== 404) {
         throw err;
       }
+
+      console.log(`Image ${image} not found locally. Pulling...`);
+      await new Promise((resolve, reject) => {
+        this.docker.pull(image, (err: any, stream: any) => {
+          if (err) return reject(err);
+          this.docker.modem.followProgress(stream, (err: any, res: any) => {
+            if (err) return reject(err);
+            resolve(res);
+          }, (event: any) => {
+            // Minimal logging to avoid spamming the console
+            if (event.status && !['Downloading', 'Extracting'].includes(event.status)) {
+              console.log(`Pulling ${image}: ${event.status}`);
+            }
+          });
+        });
+      });
     }
   }
 }

@@ -53,30 +53,31 @@ export function ensureConfigDir(configDir?: string) {
 
 export function loadConfig(configDir?: string): Config {
   const configPath = configDir ? path.join(configDir, 'config.json') : CONFIG_PATH;
-  if (fs.existsSync(configPath)) {
-    try {
-      const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return {
-        ...DEFAULT_CONFIG,
-        ...userConfig,
-        sandbox: {
-          ...DEFAULT_CONFIG.sandbox,
-          ...userConfig.sandbox,
-        },
-        daemon: {
-          ...DEFAULT_CONFIG.daemon,
-          ...userConfig.daemon,
-        },
-        auth: {
-          ...DEFAULT_CONFIG.auth,
-          ...userConfig.auth,
-        },
-      } as Config;
-    } catch (error) {
-      console.error('Error loading config, using defaults:', error);
-    }
+  if (!fs.existsSync(configPath)) {
+    return DEFAULT_CONFIG;
   }
-  return DEFAULT_CONFIG;
+  try {
+    const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    return {
+      ...DEFAULT_CONFIG,
+      ...userConfig,
+      sandbox: {
+        ...DEFAULT_CONFIG.sandbox,
+        ...userConfig.sandbox,
+      },
+      daemon: {
+        ...DEFAULT_CONFIG.daemon,
+        ...userConfig.daemon,
+      },
+      auth: {
+        ...DEFAULT_CONFIG.auth,
+        ...userConfig.auth,
+      },
+    } as Config;
+  } catch (error) {
+    console.error('Error loading config, using defaults:', error);
+    return DEFAULT_CONFIG;
+  }
 }
 
 export function saveConfig(config: Config, configDir?: string) {
@@ -93,10 +94,10 @@ export function saveTokens(tokens: any, configDir?: string) {
 
 export function loadTokens(configDir?: string) {
   const tokensPath = configDir ? path.join(configDir, 'tokens.json') : TOKENS_PATH;
-  if (fs.existsSync(tokensPath)) {
-    return JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
+  if (!fs.existsSync(tokensPath)) {
+    return null;
   }
-  return null;
+  return JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
 }
 
 export async function refreshToken(configDir?: string) {

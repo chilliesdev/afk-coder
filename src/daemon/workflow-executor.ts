@@ -130,7 +130,10 @@ export class WorkflowExecutor {
 
             success = true;
             await this.delay(decision.delayMs);
-          } else if (decision.action === 'retry') {
+            continue;
+          }
+
+          if (decision.action === 'retry') {
             retries++;
             const error = decision.error!;
             if (error.type === 'Quota') {
@@ -147,28 +150,29 @@ export class WorkflowExecutor {
               });
             }
             await this.delay(decision.delayMs);
-          } else {
-            const error = decision.error!;
-            if (error.type === 'Safety') {
-              this.logger.error('Task blocked by safety filters', {
-                output: result.logs
-              });
-              this.status = 'Failed: Safety Block';
-            } else if (error.type === 'NoProgress') {
-              this.logger.error('Agent reported no progress', {
-                output: result.logs
-              });
-              this.status = 'Failed: No Progress';
-            } else {
-              this.logger.error('Agent loop failed after max retries', { 
-                exitCode: result.exitCode,
-                output: result.logs,
-                error: error.message
-              });
-              this.status = 'Failed';
-            }
-            break;
+            continue;
           }
+
+          const error = decision.error!;
+          if (error.type === 'Safety') {
+            this.logger.error('Task blocked by safety filters', {
+              output: result.logs
+            });
+            this.status = 'Failed: Safety Block';
+          } else if (error.type === 'NoProgress') {
+            this.logger.error('Agent reported no progress', {
+              output: result.logs
+            });
+            this.status = 'Failed: No Progress';
+          } else {
+            this.logger.error('Agent loop failed after max retries', { 
+              exitCode: result.exitCode,
+              output: result.logs,
+              error: error.message
+            });
+            this.status = 'Failed';
+          }
+          break;
         } catch (err: any) {
           const decision = this.analyzer.analyze(
             err.message,
@@ -185,13 +189,14 @@ export class WorkflowExecutor {
               nextRetryIn: `${decision.delayMs / 1000}s`
             });
             await this.delay(decision.delayMs);
-          } else {
-            this.logger.error('Runtime error after max retries', { 
-              error: err.message 
-            });
-            this.status = 'Failed';
-            break;
+            continue;
           }
+
+          this.logger.error('Runtime error after max retries', { 
+            error: err.message 
+          });
+          this.status = 'Failed';
+          break;
         }
       }
 

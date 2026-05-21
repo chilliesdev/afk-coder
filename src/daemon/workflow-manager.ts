@@ -132,27 +132,28 @@ export class WorkflowManager {
       throw new Error(`Workflow ${name} not found`);
     }
     const logFile = path.join(executor.dir, 'workflow.json.log');
-    if (fs.existsSync(logFile)) {
-      if (options.offset !== undefined) {
-        const stats = fs.statSync(logFile);
-        if (options.offset >= stats.size) {
-          return { content: '', nextOffset: stats.size };
-        }
-        const fd = fs.openSync(logFile, 'r');
-        const buffer = Buffer.alloc(stats.size - options.offset);
-        fs.readSync(fd, buffer, 0, buffer.length, options.offset);
-        fs.closeSync(fd);
-        return { content: buffer.toString('utf-8'), nextOffset: stats.size };
-      }
-
-      const content = fs.readFileSync(logFile, 'utf-8');
-      const stats = fs.statSync(logFile);
-      if (options.tail) {
-        const lines = content.trim().split('\n');
-        return { content: lines.slice(-options.tail).join('\n') + '\n', nextOffset: stats.size };
-      }
-      return { content: content, nextOffset: stats.size };
+    if (!fs.existsSync(logFile)) {
+      return { content: 'No logs found.', nextOffset: 0 };
     }
-    return { content: 'No logs found.', nextOffset: 0 };
+
+    if (options.offset !== undefined) {
+      const stats = fs.statSync(logFile);
+      if (options.offset >= stats.size) {
+        return { content: '', nextOffset: stats.size };
+      }
+      const fd = fs.openSync(logFile, 'r');
+      const buffer = Buffer.alloc(stats.size - options.offset);
+      fs.readSync(fd, buffer, 0, buffer.length, options.offset);
+      fs.closeSync(fd);
+      return { content: buffer.toString('utf-8'), nextOffset: stats.size };
+    }
+
+    const content = fs.readFileSync(logFile, 'utf-8');
+    const stats = fs.statSync(logFile);
+    if (options.tail) {
+      const lines = content.trim().split('\n');
+      return { content: lines.slice(-options.tail).join('\n') + '\n', nextOffset: stats.size };
+    }
+    return { content: content, nextOffset: stats.size };
   }
 }

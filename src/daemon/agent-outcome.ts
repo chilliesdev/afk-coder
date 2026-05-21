@@ -41,18 +41,7 @@ export class OutcomeAnalyzer {
     }
 
     const nextRetry = currentRetry + 1;
-    if (nextRetry <= this.maxRetries) {
-      let delayMs = Math.pow(2, nextRetry) * 5000;
-      if (resolvedError.type === 'Quota') {
-        delayMs = Math.max(delayMs, 60000);
-      }
-      return {
-        action: 'retry',
-        delayMs,
-        tokens,
-        error: resolvedError
-      };
-    } else {
+    if (nextRetry > this.maxRetries) {
       return {
         action: 'fail',
         delayMs: 0,
@@ -60,6 +49,17 @@ export class OutcomeAnalyzer {
         error: resolvedError
       };
     }
+
+    let delayMs = Math.pow(2, nextRetry) * 5000;
+    if (resolvedError.type === 'Quota') {
+      delayMs = Math.max(delayMs, 60000);
+    }
+    return {
+      action: 'retry',
+      delayMs,
+      tokens,
+      error: resolvedError
+    };
   }
 }
 
