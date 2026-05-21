@@ -24,44 +24,26 @@ describe('CLI Commands', () => {
   });
 
   describe('init command', () => {
-    it('should generate tasks.md if PRD.md exists', async () => {
-      (fs.existsSync as jest.Mock).mockImplementation((p: string) => p.endsWith('PRD.md'));
-      
-      const options = { dir: './test-dir' };
+    it('should call sendCommand with init options', async () => {
+      const { sendCommand } = await import('../src/cli/client');
+      const { CONFIG_DIR } = await import('../src/common/config');
+
+      const options = { dir: './test-dir', prd: 'PRD.md', force: false };
       const dir = path.resolve(options.dir);
-      const prdPath = path.join(dir, 'PRD.md');
-      const tasksPath = path.join(dir, 'tasks.md');
 
-      // Simulating the action in src/cli/index.ts
-      const sandbox = new DockerRuntime();
-      if (fs.existsSync(prdPath)) {
-        const run = await sandbox.run('gemini --yolo ...', dir);
-        const result = await run.wait();
-        if (result.exitCode === 0) {
-           if (!fs.existsSync(tasksPath)) {
-             fs.writeFileSync(tasksPath, result.logs.trim());
-           }
-        }
-      }
+      await sendCommand('init', {
+        dir,
+        prd: options.prd,
+        force: options.force,
+        configDir: CONFIG_DIR
+      });
 
-      expect(mockSandbox.run).toHaveBeenCalledWith(expect.stringContaining('gemini --yolo'), dir);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(tasksPath, '- [ ] Task 1');
-    });
-
-    it('should error if PRD.md is missing', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      const options = { dir: './test-dir' };
-      const dir = path.resolve(options.dir);
-      const prdPath = path.join(dir, 'PRD.md');
-
-      if (!fs.existsSync(prdPath)) {
-        console.error(`Error: PRD.md not found in ${dir}`);
-      }
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('PRD.md not found'));
-      consoleErrorSpy.mockRestore();
+      expect(sendCommand).toHaveBeenCalledWith('init', {
+        dir,
+        prd: 'PRD.md',
+        force: false,
+        configDir: CONFIG_DIR
+      });
     });
   });
 

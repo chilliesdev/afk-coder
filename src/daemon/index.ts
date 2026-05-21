@@ -6,11 +6,13 @@ import { DaemonResponse } from '../common/types';
 import { loadConfig } from '../common/config';
 import { DockerRuntime } from './runtime-docker';
 import { AgentStrategy } from './agent-strategy';
+import { TaskGenerator } from './task-generator';
 
 const config = loadConfig();
 const runtime = new DockerRuntime();
 const strategy = new AgentStrategy();
 const workflowManager = new WorkflowManager(runtime, strategy);
+const taskGenerator = new TaskGenerator(runtime, strategy);
 
 let SOCKET_PATH = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath;
 
@@ -53,6 +55,10 @@ const server = net.createServer((socket) => {
       let response: DaemonResponse;
 
       switch (request.command) {
+        case 'init':
+          const initResult = await taskGenerator.generate(request.args.dir, request.args.prd, request.args.force, request.args.configDir);
+          response = { success: initResult.success, message: initResult.error, data: initResult.logs };
+          break;
         case 'start':
           const workflow = await workflowManager.startWorkflow(request.args.name, request.args.dir, request.args.configDir);
           response = { success: true, data: workflow };

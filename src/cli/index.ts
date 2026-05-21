@@ -19,66 +19,25 @@ program
   .option('--prd <filename>', 'Name of the PRD file', 'PRD.md')
   .option('--force', 'Overwrite existing tasks.md')
   .action(async (options) => {
-    const { DockerRuntime } = await import('../daemon/runtime-docker');
-    const sandbox = new DockerRuntime();
-
-    const dir = path.resolve(options.dir);
-    const prdPath = path.join(dir, options.prd);
-    const tasksPath = path.join(dir, 'tasks.md');
-
-    if (!fs.existsSync(prdPath)) {
-      console.error(`Error: ${options.prd} not found in ${dir}`);
-      return;
-    }
-
-    if (fs.existsSync(tasksPath) && !options.force) {
-      console.error(`Error: tasks.md already exists in ${dir}. Use --force to overwrite.`);
-      return;
-    }
-
-    // Pre-create the file to ensure it is owned by the current user, not root
     try {
-      fs.writeFileSync(tasksPath, '');
-    } catch (err: any) {
-      console.error(`Failed to create tasks.md: ${err.message}`);
-      return;
-    }
+      const dir = path.resolve(options.dir);
+      const { CONFIG_DIR } = await import('../common/config');
 
-    console.log(`Generating tasks.md from ${prdPath} using Docker sandbox...`);
-    try {
-      const { AgentStrategy } = await import('../daemon/agent-strategy');
-      const strategy = new AgentStrategy();
-      const prompt = strategy.getTaskGenerationPrompt(options.prd);
+      console.log(`Generating tasks.md from ${options.prd} via Gemini AFK Daemon...`);
+      const response = await sendCommand('init', {
+        dir,
+        prd: options.prd,
+        force: options.force,
+        configDir: CONFIG_DIR
+      });
 
-      const run = await sandbox.run(prompt, dir);
-      const result = await run.wait();
-
-      if (result.exitCode === 0) {
-        if (fs.existsSync(tasksPath)) {
-          const content = fs.readFileSync(tasksPath, 'utf8');
-          if (content.trim() === '') {
-            // If the file is still empty, the sandbox didn't write to it directly.
-            // Let's try to parse stdout.
-            const lines = result.logs.split('\n').filter(l => l.trim().startsWith('- [ ]'));
-            if (lines.length > 0) {
-              fs.writeFileSync(tasksPath, lines.join('\n'));
-              console.log('Successfully generated tasks.md (from stdout)');
-            } else {
-              console.error('Failed to generate tasks.md: No tasks found in output');
-              console.log('Logs:', result.logs);
-              // Clean up empty file
-              fs.unlinkSync(tasksPath);
-            }
-          } else {
-            console.log('Successfully generated tasks.md');
-          }
-        } else {
-            // this branch should never be hit since we pre-created it, but just in case
-            console.error('Failed to generate tasks.md: File disappeared');
-        }
+      if (response.success) {
+        console.log(response.data || 'Successfully generated tasks.md');
       } else {
-        console.error(`Failed to generate tasks.md: Exit code ${result.exitCode}`);
-        console.error('Logs:', result.logs);
+        console.error(`Failed to generate tasks.md: ${response.message}`);
+        if (response.data) {
+          console.log('Logs:', response.data);
+        }
       }
     } catch (err: any) {
       console.error('Failed to generate tasks.md:', err.message);
