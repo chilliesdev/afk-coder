@@ -167,13 +167,46 @@ program
         const code = reqUrl.searchParams.get('code');
         const error = reqUrl.searchParams.get('error');
 
+        const htmlTemplate = (title: string, message: string, script: string = '') => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f3f4f6; color: #1f2937; }
+    main { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 90%; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #111827; }
+    p { margin-bottom: 1.5rem; color: #4b5563; }
+    .btn { display: inline-block; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; text-decoration: none; }
+    .btn:hover { background-color: #2563eb; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${title}</h1>
+    <p>${message}</p>
+    ${script}
+  </main>
+</body>
+</html>`;
+
         if (code) {
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end('<h1>Authentication successful!</h1><p>Please return to the console.</p><script>window.close();</script>');
+          res.end(htmlTemplate(
+            'Authentication Successful',
+            'You have successfully authenticated with Google. You can now close this window and return to your terminal.',
+            '<button class="btn" onclick="window.close()" aria-label="Close window">Close Window</button><script>setTimeout(() => window.close(), 3000);</script>'
+          ));
           await finishLogin(code);
         } else if (error) {
           res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end(`<h1>Authentication failed!</h1><p>Error: ${error}</p>`);
+          res.end(htmlTemplate(
+            'Authentication Failed',
+            `An error occurred during authentication: <strong>${error}</strong>. Please check your console for details.`,
+            '<button class="btn" onclick="window.close()" aria-label="Close window">Close Window</button>'
+          ));
           if (!isFinished) {
             isFinished = true;
             rl.close();
