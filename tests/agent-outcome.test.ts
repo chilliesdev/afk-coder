@@ -1,4 +1,4 @@
-import { parseAgentOutput } from '../src/daemon/agent-outcome';
+import { parseAgentOutput, AgentOutcomeEvaluator } from '../src/daemon/agent-outcome';
 
 describe('AgentOutcome', () => {
   it('should parse successful execution with token usage', () => {
@@ -70,5 +70,93 @@ Done!
     expect(outcome.success).toBe(false);
     expect(outcome.tokens.total).toBe(30);
     expect(outcome.error?.type).toBe('Quota');
+  });
+});
+
+describe('AgentOutcomeEvaluator', () => {
+  let evaluator: AgentOutcomeEvaluator;
+
+  beforeEach(() => {
+    evaluator = new AgentOutcomeEvaluator(3);
+  });
+
+  it('should return action next when exit code is 0 and new tasks are completed', () => {
+    const decision = evaluator.evaluate(
+      'Tokens: 100 prompt, 50 completion',
+      0,
+      0,
+      true
+    );
+    expect(decision.action).toBe('next');
+    expect(decision.delayMs).toBe(5000);
+    expect(decision.tokens.input).toBe(100);
+    expect(decision.tokens.output).toBe(50);
+    expect(decision.error).toBeUndefined();
+  });
+
+  it('should return action fail with NoProgress error when exit code is 0 but no tasks are completed', () => {
+    const decision = evaluator.evaluate(
+      'Tokens: 100 prompt, 50 completion',
+      0,
+      0,
+      false
+    );
+    expect(decision.action).toBe('fail');
+    expect(decision.error?.type).toBe('NoProgress');
+    expect(decision.error?.message).toContain('no progress');
+  });
+
+  it('should return action fail immediately for Safety errors', () => {
+    const decision = evaluator.evaluate(
+      'Candidate was blocked due to safety reasons.',
+      1,
+      0,
+      false
+    );
+    expect(decision.action).toBe('fail');
+    expect(decision.error?.type).toBe('Safety');
+  });
+
+  it('should return action fail immediately for NoProgress errors in logs', () => {
+    const decision = evaluator.evaluate(
+      'I am stuck. No progress could be made.',
+      1,
+      0,
+      false
+    );
+    expect(decision.action).toBe('fail');
+    expect(decision.error?.type).toBe('NoProgress');
+  });
+
+  it('should retry for Quota errors with minimum 60s wait', () => {
+    const decision = evaluator.evaluate(
+      'Error: 429 Too Many Requests. Quota exceeded.',
+      1,
+      0,
+      false
+    );
+    expect(decision.action).toBe('retry');
+    expect(decision.error?.type).toBe('Quota');
+    expect(decision.delayMs).toBe(60000);
+  });
+
+  it('should calculate exponential backoff for retriable errors', () => {
+    const d1 = evaluator.evaluate('Runtime error', 1, 0, false);
+    expect(d1.action).toBe('retry');
+    expect(d1.delayMs).toBe(10000);
+
+    const d2 = evaluator.evaluate('Runtime error', 1, 1, false);
+    expect(d2.action).toBe('retry');
+    expect(d2.delayMs).toBe(20000);
+
+    const d3 = evaluator.evaluate('Runtime error', 1, 2, false);
+    expect(d3.action).toBe('retry');
+    expect(d3.delayMs).toBe(40000);
+  });
+
+  it('should return action fail when max retries are exceeded', () => {
+    const decision = evaluator.evaluate('Runtime error', 1, 3, false);
+    expect(decision.action).toBe('fail');
+    expect(decision.error?.type).toBe('Runtime');
   });
 });

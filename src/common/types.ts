@@ -17,6 +17,15 @@ export interface Outcome {
   error?: AgentError;
 }
 
+export type WorkflowAction = 'next' | 'retry' | 'fail';
+
+export interface ExecutionDecision {
+  action: WorkflowAction;
+  delayMs: number;
+  tokens: TokenUsage;
+  error?: AgentError;
+}
+
 export interface Task {
   completed: boolean;
   description: string;

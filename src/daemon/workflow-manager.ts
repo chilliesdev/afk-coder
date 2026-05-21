@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
-import { parseAgentOutput } from './agent-outcome';
+import { AgentOutcomeEvaluator } from './agent-outcome';
 import { ExecutionRuntime } from './execution-runtime';
 import { AgentStrategy } from './agent-strategy';
 
@@ -17,15 +17,18 @@ export class WorkflowManager {
   private runtime: ExecutionRuntime;
   private strategy: AgentStrategy;
   private taskBoardFactory: (path: string) => ITaskBoard;
+  private evaluator: AgentOutcomeEvaluator;
 
   constructor(
     runtime: ExecutionRuntime, 
     strategy: AgentStrategy, 
-    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(p)
+    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(p),
+    evaluator: AgentOutcomeEvaluator = new AgentOutcomeEvaluator()
   ) {
     this.runtime = runtime;
     this.strategy = strategy;
     this.taskBoardFactory = taskBoardFactory;
+    this.evaluator = evaluator;
   }
 
   private getOrCreateLogger(name: string, dir: string): winston.Logger {
@@ -124,10 +127,9 @@ export class WorkflowManager {
       workflow.currentTask = 'Autonomous Task Selection';
 
       let retries = 0;
-      const maxRetries = 3;
       let success = false;
 
-      while (retries <= maxRetries && !success) {
+      while (!success && workflow.status.startsWith('Running')) {
         try {
           const prompt = this.strategy.getAutonomousLoopPrompt();
           const run = await this.runtime.run(prompt, workflow.dir, workflow.configDir);
@@ -144,27 +146,35 @@ export class WorkflowManager {
           workflow.stopHandle = undefined;
 
           if (workflow.status === 'Done' || !workflow.status.startsWith('Running')) {
-            // Workflow was killed while waiting
+            // Workflow was killed or completed while waiting
             break;
           }
 
-          const outcome = parseAgentOutput(result.logs, result.exitCode);
-          
-          // Update global token usage
-          workflow.tokenUsage.input += outcome.tokens.input;
-          workflow.tokenUsage.output += outcome.tokens.output;
-          workflow.tokenUsage.total += outcome.tokens.total;
+          let hasNewCompletedTasks = false;
+          let newlyCompletedTasks: Task[] = [];
+          let updatedState = boardState;
 
-          if (outcome.success) {
-            // Reconcile task board changes and obtain updated state
+          if (result.exitCode === 0) {
             const reconciliation = await taskBoard.reconcile();
-            const newlyCompletedTasks = reconciliation.newlyCompleted;
-            const updatedState = reconciliation.state;
-            
-            if (newlyCompletedTasks.length === 0) {
-              throw new Error(`No tasks were marked as completed in tasks.md`);
-            }
+            newlyCompletedTasks = reconciliation.newlyCompleted;
+            updatedState = reconciliation.state;
+            hasNewCompletedTasks = newlyCompletedTasks.length > 0;
+          }
 
+          // Call deep evaluator
+          const decision = this.evaluator.evaluate(
+            result.logs,
+            result.exitCode,
+            retries,
+            hasNewCompletedTasks
+          );
+
+          // Update global token usage
+          workflow.tokenUsage.input += decision.tokens.input;
+          workflow.tokenUsage.output += decision.tokens.output;
+          workflow.tokenUsage.total += decision.tokens.total;
+
+          if (decision.action === 'next') {
             // Update task tracking
             newlyCompletedTasks.forEach(t => {
               workflow.recentTasks.unshift(t.description);
@@ -173,52 +183,48 @@ export class WorkflowManager {
               workflow.recentTasks.length = 5;
             }
             workflow.currentTask = undefined;
-
             workflow.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
 
             logger.info('Tasks completed successfully', { 
               completedTasks: newlyCompletedTasks.map(t => t.description), 
               exitCode: result.exitCode,
               output: result.logs,
-              tokenUsage: outcome.tokens,
+              tokenUsage: decision.tokens,
               workflowTokenUsage: workflow.tokenUsage
             });
+
             success = true;
-          } else {
-            const error = outcome.error!;
+            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
+          } else if (decision.action === 'retry') {
             retries++;
-            
-            if (retries <= maxRetries) {
-              let delay = Math.pow(2, retries) * 5000;
-              
-              if (error.type === 'Quota') {
-                delay = Math.max(delay, 60000); // Wait at least 60s for quota errors
-                logger.warn('Gemini API quota exceeded, waiting longer...', {
-                  attempt: retries,
-                  nextRetryIn: `${delay / 1000}s`
-                });
-              } else if (error.type === 'Safety') {
-                logger.error('Task blocked by safety filters', {
-                  output: result.logs
-                });
-                workflow.status = 'Failed: Safety Block';
-                break;
-              } else if (error.type === 'NoProgress') {
-                logger.error('Agent reported no progress', {
-                  output: result.logs
-                });
-                workflow.status = 'Failed: No Progress';
-                break;
-              } else {
-                logger.warn('Agent loop failed, retrying...', { 
-                  exitCode: result.exitCode, 
-                  attempt: retries,
-                  nextRetryIn: `${delay / 1000}s`,
-                  output: result.logs
-                });
-              }
-              
-              await new Promise(resolve => setTimeout(resolve, delay));
+            const error = decision.error!;
+            if (error.type === 'Quota') {
+              logger.warn('Gemini API quota exceeded, waiting longer...', {
+                attempt: retries,
+                nextRetryIn: `${decision.delayMs / 1000}s`
+              });
+            } else {
+              logger.warn('Agent loop failed, retrying...', { 
+                exitCode: result.exitCode, 
+                attempt: retries,
+                nextRetryIn: `${decision.delayMs / 1000}s`,
+                output: result.logs
+              });
+            }
+            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
+          } else {
+            // action === 'fail'
+            const error = decision.error!;
+            if (error.type === 'Safety') {
+              logger.error('Task blocked by safety filters', {
+                output: result.logs
+              });
+              workflow.status = 'Failed: Safety Block';
+            } else if (error.type === 'NoProgress') {
+              logger.error('Agent reported no progress', {
+                output: result.logs
+              });
+              workflow.status = 'Failed: No Progress';
             } else {
               logger.error('Agent loop failed after max retries', { 
                 exitCode: result.exitCode,
@@ -226,31 +232,37 @@ export class WorkflowManager {
                 error: error.message
               });
               workflow.status = 'Failed';
-              break;
             }
+            break;
           }
         } catch (err: any) {
-          retries++;
-          if (retries <= maxRetries) {
-            const delay = Math.pow(2, retries) * 5000;
+          // JS/Runtime level errors (not agent errors)
+          const decision = this.evaluator.evaluate(
+            err.message,
+            -1, // indicate non-zero exit code
+            retries,
+            false
+          );
+
+          if (decision.action === 'retry') {
+            retries++;
             logger.error('Runtime error, retrying...', { 
               error: err.message,
               attempt: retries,
-              nextRetryIn: `${delay / 1000}s`
+              nextRetryIn: `${decision.delayMs / 1000}s`
             });
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
           } else {
             logger.error('Runtime error after max retries', { 
               error: err.message 
             });
-            throw err;
+            workflow.status = 'Failed';
+            break;
           }
         }
       }
 
       if (workflow.status === 'Failed' || workflow.status.startsWith('Failed')) break;
-
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Sleep between iterations
     }
   }
 

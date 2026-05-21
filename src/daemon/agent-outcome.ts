@@ -1,4 +1,66 @@
-import { Outcome, TokenUsage, AgentError } from '../common/types';
+import { Outcome, TokenUsage, AgentError, ExecutionDecision } from '../common/types';
+
+export class AgentOutcomeEvaluator {
+  constructor(private maxRetries: number = 3) {}
+
+  evaluate(
+    logs: string,
+    exitCode: number,
+    currentRetry: number,
+    hasNewCompletedTasks: boolean
+  ): ExecutionDecision {
+    const tokens = extractTokenUsage(logs);
+
+    let error = classifyError(logs, exitCode);
+
+    if (exitCode === 0 && !hasNewCompletedTasks) {
+      error = {
+        type: 'NoProgress',
+        message: 'Agent reported no progress could be made'
+      };
+    }
+
+    if (exitCode === 0 && hasNewCompletedTasks) {
+      return {
+        action: 'next',
+        delayMs: 5000,
+        tokens
+      };
+    }
+
+    const resolvedError = error || { type: 'Runtime', message: `Agent exited with code ${exitCode}` };
+
+    if (resolvedError.type === 'Safety' || resolvedError.type === 'NoProgress') {
+      return {
+        action: 'fail',
+        delayMs: 0,
+        tokens,
+        error: resolvedError
+      };
+    }
+
+    const nextRetry = currentRetry + 1;
+    if (nextRetry <= this.maxRetries) {
+      let delayMs = Math.pow(2, nextRetry) * 5000;
+      if (resolvedError.type === 'Quota') {
+        delayMs = Math.max(delayMs, 60000);
+      }
+      return {
+        action: 'retry',
+        delayMs,
+        tokens,
+        error: resolvedError
+      };
+    } else {
+      return {
+        action: 'fail',
+        delayMs: 0,
+        tokens,
+        error: resolvedError
+      };
+    }
+  }
+}
 
 /**
  * Parses raw stdout/stderr and exit codes from the Gemini CLI Agent.
