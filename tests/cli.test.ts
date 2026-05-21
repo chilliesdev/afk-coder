@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { validateWorkflowDir } from '../src/common/validation';
-import { Sandbox } from '../src/sandbox';
+import { DockerRuntime } from '../src/daemon/runtime-docker';
 
 // Mock Sandbox and fs
 jest.mock('fs');
-jest.mock('../src/sandbox');
+jest.mock('../src/daemon/runtime-docker');
 jest.mock('../src/cli/client', () => ({
   sendCommand: jest.fn()
 }));
@@ -20,7 +20,7 @@ describe('CLI Commands', () => {
         wait: jest.fn().mockResolvedValue({ exitCode: 0, logs: '- [ ] Task 1' })
       })
     };
-    (Sandbox as jest.Mock).mockImplementation(() => mockSandbox);
+    (DockerRuntime as jest.Mock).mockImplementation(() => mockSandbox);
   });
 
   describe('init command', () => {
@@ -33,7 +33,7 @@ describe('CLI Commands', () => {
       const tasksPath = path.join(dir, 'tasks.md');
 
       // Simulating the action in src/cli/index.ts
-      const sandbox = new Sandbox();
+      const sandbox = new DockerRuntime();
       if (fs.existsSync(prdPath)) {
         const run = await sandbox.run('gemini --yolo ...', dir);
         const result = await run.wait();

@@ -1,4 +1,4 @@
-import { Sandbox } from '../src/sandbox';
+import { DockerRuntime } from '../src/daemon/runtime-docker';
 import { loadTokens, refreshToken, loadConfig } from '../src/common/config';
 
 jest.mock('../src/common/config');
@@ -23,7 +23,7 @@ describe('Sandbox Authentication', () => {
       }
     });
 
-    const sandbox = new Sandbox();
+    const sandbox = new DockerRuntime();
     await expect(sandbox.run('test prompt', '/test/dir')).rejects.toThrow(
       'Authentication required. Please run "afk-coder login" or set the GEMINI_API_KEY environment variable.'
     );

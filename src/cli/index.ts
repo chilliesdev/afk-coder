@@ -19,8 +19,8 @@ program
   .option('--prd <filename>', 'Name of the PRD file', 'PRD.md')
   .option('--force', 'Overwrite existing tasks.md')
   .action(async (options) => {
-    const { Sandbox } = await import('../sandbox');
-    const sandbox = new Sandbox();
+    const { DockerRuntime } = await import('../daemon/runtime-docker');
+    const sandbox = new DockerRuntime();
 
     const dir = path.resolve(options.dir);
     const prdPath = path.join(dir, options.prd);
