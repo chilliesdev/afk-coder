@@ -1,8 +1,10 @@
-import { sendCommand } from '../src/cli/client';
+import { DaemonClient } from '../src/cli/client';
 
-// Mock sendCommand
+// Mock DaemonClient
 jest.mock('../src/cli/client', () => ({
-  sendCommand: jest.fn()
+  DaemonClient: jest.fn().mockImplementation(() => ({
+    sendCommand: jest.fn()
+  }))
 }));
 
 describe('CLI status command', () => {
@@ -34,7 +36,8 @@ describe('CLI status command', () => {
       }
     };
 
-    (sendCommand as jest.Mock).mockResolvedValue({
+    const client = new DaemonClient();
+    (client.sendCommand as jest.Mock).mockResolvedValue({
       success: true,
       data: mockWorkflow
     });

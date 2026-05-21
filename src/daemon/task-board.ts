@@ -1,14 +1,16 @@
 import { Task, TaskBoard as ITaskBoard, TaskBoardState } from '../common/types';
-import { parseTasks, validateTasks } from '../common/validation';
+import { TaskValidator } from '../common/validation';
 import { TaskBoardStorage } from './task-storage';
 
 export class TaskBoard implements ITaskBoard {
   private tasks: Task[] = [];
   private baseline: Task[] = [];
   private storage: TaskBoardStorage;
+  private validator: TaskValidator;
 
-  constructor(storage: TaskBoardStorage) {
+  constructor(storage: TaskBoardStorage, validator: TaskValidator = new TaskValidator()) {
     this.storage = storage;
+    this.validator = validator;
   }
 
   async load(): Promise<TaskBoardState> {
@@ -44,8 +46,8 @@ export class TaskBoard implements ITaskBoard {
       return;
     }
     const content = await this.storage.read();
-    validateTasks(content);
-    this.tasks = parseTasks(content);
+    this.validator.validateTasks(content);
+    this.tasks = this.validator.parseTasks(content);
   }
 
   private getState(): TaskBoardState {

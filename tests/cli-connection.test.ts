@@ -1,13 +1,15 @@
 import * as net from 'net';
-import { sendCommand } from '../src/cli/client';
+import { DaemonClient } from '../src/cli/client';
 
 jest.mock('net');
 
 describe('CLI Client Connection Error Handling', () => {
   let mockSocket: any;
+  let client: DaemonClient;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    client = new DaemonClient();
     mockSocket = {
       on: jest.fn(),
       write: jest.fn(),
@@ -17,7 +19,7 @@ describe('CLI Client Connection Error Handling', () => {
   });
 
   it('should provide specific advice for ENOENT (daemon not running)', async () => {
-    const promise = sendCommand('list');
+    const promise = client.sendCommand('list');
     
     // Find the 'error' handler and trigger it
     const errorHandler = mockSocket.on.mock.calls.find((call: any) => call[0] === 'error')[1];
@@ -28,7 +30,7 @@ describe('CLI Client Connection Error Handling', () => {
   });
 
   it('should provide specific advice for ECONNREFUSED (stale socket)', async () => {
-    const promise = sendCommand('list');
+    const promise = client.sendCommand('list');
     
     const errorHandler = mockSocket.on.mock.calls.find((call: any) => call[0] === 'error')[1];
     errorHandler({ code: 'ECONNREFUSED' });
@@ -38,7 +40,7 @@ describe('CLI Client Connection Error Handling', () => {
   });
 
   it('should provide specific advice for EACCES (permission denied)', async () => {
-    const promise = sendCommand('list');
+    const promise = client.sendCommand('list');
     
     const errorHandler = mockSocket.on.mock.calls.find((call: any) => call[0] === 'error')[1];
     errorHandler({ code: 'EACCES' });
@@ -48,7 +50,7 @@ describe('CLI Client Connection Error Handling', () => {
   });
 
   it('should provide a generic error message for unknown error codes', async () => {
-    const promise = sendCommand('list');
+    const promise = client.sendCommand('list');
     
     const errorHandler = mockSocket.on.mock.calls.find((call: any) => call[0] === 'error')[1];
     errorHandler({ code: 'UNKNOWN', message: 'Something went wrong' });
@@ -58,7 +60,7 @@ describe('CLI Client Connection Error Handling', () => {
 
   it('should resolve successfully when daemon responds correctly', async () => {
     const mockResponse = { success: true, data: [] };
-    const promise = sendCommand('list');
+    const promise = client.sendCommand('list');
 
     const connectCallback = (net.createConnection as jest.Mock).mock.calls[0][1];
     connectCallback(); // Simulate connection success

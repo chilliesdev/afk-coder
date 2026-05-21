@@ -1,12 +1,14 @@
 import * as net from 'net';
 import * as fs from 'fs';
 import * as child_process from 'child_process';
-import { loadConfig } from '../src/common/config';
+import { ConfigManager } from '../src/common/config';
 
 jest.mock('net');
 jest.mock('fs');
 jest.mock('child_process');
-jest.mock('../src/common/config');
+jest.mock('../src/common/config', () => ({
+  ConfigManager: jest.fn()
+}));
 
 describe('Daemon Socket Group Ownership', () => {
   let mockServer: any;
@@ -23,12 +25,14 @@ describe('Daemon Socket Group Ownership', () => {
     };
     (net.createServer as jest.Mock).mockReturnValue(mockServer);
     
-    (loadConfig as jest.Mock).mockReturnValue({
-      daemon: {
-        socketGroup: 'afk-coder-users',
-        socketPath: '/tmp/afk-coder.sock'
-      }
-    });
+    (ConfigManager as jest.Mock).mockImplementation(() => ({
+      loadConfig: jest.fn().mockReturnValue({
+        daemon: {
+          socketGroup: 'afk-coder-users',
+          socketPath: '/tmp/afk-coder.sock'
+        }
+      })
+    }));
 
     // Mock process.getuid if it doesn't exist (e.g. on Windows)
     if (!process.getuid) {

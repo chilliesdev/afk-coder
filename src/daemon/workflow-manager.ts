@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
 import { FileSystemTaskStorage } from './task-storage';
+import { TaskValidator } from '../common/validation';
 import { OutcomeAnalyzer } from './agent-outcome';
 import { Agent } from './agent';
 import { WorkflowExecutor } from './workflow-executor';
@@ -17,7 +18,7 @@ export class WorkflowManager {
 
   constructor(
     agent: Agent, 
-    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p)),
+    taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p), new TaskValidator()),
     evaluator: OutcomeAnalyzer = new OutcomeAnalyzer()
   ) {
     this.agent = agent;

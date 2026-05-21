@@ -3,14 +3,22 @@ import * as fs from 'fs';
 import * as child_process from 'child_process';
 import { WorkflowManager } from './workflow-manager';
 import { DaemonResponse } from '../common/types';
-import { loadConfig } from '../common/config';
+import { ConfigManager } from '../common/config';
 import { DockerRuntime } from './runtime-docker';
 import { Agent } from './agent';
+import { TaskValidator } from '../common/validation';
+import { TaskBoard } from './task-board';
+import { FileSystemTaskStorage } from './task-storage';
 
-const config = loadConfig();
-const runtime = new DockerRuntime();
+const configManager = new ConfigManager();
+const config = configManager.loadConfig();
+const runtime = new DockerRuntime(configManager);
 const agent = new Agent(runtime);
-const workflowManager = new WorkflowManager(agent);
+const validator = new TaskValidator();
+const workflowManager = new WorkflowManager(
+  agent,
+  (p) => new TaskBoard(new FileSystemTaskStorage(p), validator)
+);
 
 let SOCKET_PATH = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath;
 

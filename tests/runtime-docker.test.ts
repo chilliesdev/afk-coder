@@ -1,20 +1,32 @@
 import Docker from 'dockerode';
 import { DockerRuntime } from '../src/daemon/runtime-docker';
-import * as config from '../src/common/config';
+import { ConfigManager } from '../src/common/config';
+
+export const mockLoadTokens = jest.fn();
+export const mockLoadConfig = jest.fn();
+export const mockRefreshToken = jest.fn();
 
 jest.mock('dockerode');
-jest.mock('../src/common/config');
+jest.mock('../src/common/config', () => ({
+  ConfigManager: jest.fn().mockImplementation(() => ({
+    loadTokens: mockLoadTokens,
+    loadConfig: mockLoadConfig,
+    refreshToken: mockRefreshToken
+  })),
+  TOKENS_PATH: '/mock/tokens.json',
+  CONFIG_DIR: '/mock/config'
+}));
 
 describe('DockerRuntime', () => {
 
   it('should cover auth required throw', async () => {
-    (config.loadTokens as jest.Mock).mockReturnValue(null);
+    mockLoadTokens.mockReturnValue(null);
     delete process.env['GEMINI_API_KEY'];
     await expect(runtime.run('test', './')).rejects.toThrow('Authentication required');
   });
 
   it('should cover API key only', async () => {
-    (config.loadTokens as jest.Mock).mockReturnValue(null);
+    mockLoadTokens.mockReturnValue(null);
     process.env['GEMINI_API_KEY'] = 'test-key';
     const handle = await runtime.run('test', './');
     expect(handle).toBeDefined();
@@ -72,7 +84,7 @@ describe('DockerRuntime', () => {
   });
 
   it('should cover no tokens file existing', async () => {
-    (config.loadTokens as jest.Mock).mockReturnValue({ access_token: 'test' });
+    mockLoadTokens.mockReturnValue({ access_token: 'test' });
     const fsMod = require('fs');
     jest.spyOn(fsMod, 'existsSync').mockImplementation(((p: any) => {
       if (typeof p === 'string') return !p.includes('tokens.json');
@@ -102,7 +114,7 @@ describe('DockerRuntime', () => {
   });
 
   it('should cover copyFileSync when tokens exist in custom configDir', async () => {
-    (config.loadTokens as jest.Mock).mockReturnValue({ access_token: 'test' });
+    mockLoadTokens.mockReturnValue({ access_token: 'test' });
     const fsMod = require('fs');
     jest.spyOn(fsMod, 'existsSync').mockImplementation(((p: any) => {
       return true;
@@ -154,18 +166,18 @@ describe('DockerRuntime', () => {
     (Docker.prototype.getImage as jest.Mock).mockReturnValue({
       inspect: jest.fn().mockResolvedValue({}),
     });
-    (config.loadConfig as jest.Mock).mockReturnValue({
+    mockLoadConfig.mockReturnValue({
       sandbox: {
         image: 'test-image',
         memory: 1024,
         nanoCpus: 1000000000,
       }
     });
-    (config.loadTokens as jest.Mock).mockReturnValue({
+    mockLoadTokens.mockReturnValue({
       access_token: 'test-access',
       refresh_token: 'test-refresh',
     });
-    (config.refreshToken as jest.Mock).mockResolvedValue({});
+    mockRefreshToken.mockResolvedValue({});
 
     runtime = new DockerRuntime();
   });
@@ -189,7 +201,7 @@ describe('DockerRuntime', () => {
   });
 
   it('should propagate GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET if present in config', async () => {
-    (config.loadConfig as jest.Mock).mockReturnValue({
+    mockLoadConfig.mockReturnValue({
       sandbox: { image: 'test-image' },
       auth: { clientId: 'test-client-id', clientSecret: 'test-client-secret' }
     });

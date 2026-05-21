@@ -1,6 +1,12 @@
-import { parseTasks, validateTasks } from '../src/common/validation';
+import { TaskValidator } from '../src/common/validation';
 
 describe('Validation', () => {
+  let validator: TaskValidator;
+
+  beforeEach(() => {
+    validator = new TaskValidator();
+  });
+
   describe('parseTasks', () => {
     it('should correctly parse tasks and their status', () => {
       const content = `
@@ -10,7 +16,7 @@ describe('Validation', () => {
 - [X] Task 3: Also Completed
 - [ ] Task 4: Another Pending
       `;
-      const tasks = parseTasks(content);
+      const tasks = validator.parseTasks(content);
       expect(tasks).toHaveLength(4);
       expect(tasks[0]).toEqual({ completed: true, description: 'Task 1: Completed' });
       expect(tasks[1]).toEqual({ completed: false, description: 'Task 2: Pending' });
@@ -20,7 +26,7 @@ describe('Validation', () => {
 
     it('should handle different spacing and case', () => {
       const content = '- [x] Task 1\n- [ ]   Task 2\n- [X] Task 3';
-      const tasks = parseTasks(content);
+      const tasks = validator.parseTasks(content);
       expect(tasks).toEqual([
         { completed: true, description: 'Task 1' },
         { completed: false, description: 'Task 2' },
@@ -30,7 +36,7 @@ describe('Validation', () => {
 
     it('should handle literal \\n characters', () => {
       const content = '- [ ] Task 1\\n- [ ] Task 2';
-      const tasks = parseTasks(content);
+      const tasks = validator.parseTasks(content);
       expect(tasks).toEqual([
         { completed: false, description: 'Task 1' },
         { completed: false, description: 'Task 2' },
@@ -41,17 +47,17 @@ describe('Validation', () => {
   describe('validateTasks', () => {
     it('should throw error if no tasks found', () => {
       const content = '# Project\nJust some text';
-      expect(() => validateTasks(content)).toThrow('No tasks found in tasks.md');
+      expect(() => validator.validateTasks(content)).toThrow('No tasks found in tasks.md');
     });
 
     it('should throw error for invalid task format', () => {
       const content = '- [ ] Valid task\n- [ invalid ] task';
-      expect(() => validateTasks(content)).toThrow('Invalid task format');
+      expect(() => validator.validateTasks(content)).toThrow('Invalid task format');
     });
 
     it('should not throw for valid tasks', () => {
       const content = '- [ ] Valid task\n- [x] Done task';
-      expect(() => validateTasks(content)).not.toThrow();
+      expect(() => validator.validateTasks(content)).not.toThrow();
     });
   });
 });

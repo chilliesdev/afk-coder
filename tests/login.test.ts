@@ -1,8 +1,10 @@
 import { OAuth2Client } from 'google-auth-library';
-import { loadConfig } from '../src/common/config';
+import { ConfigManager } from '../src/common/config';
 
 jest.mock('google-auth-library');
-jest.mock('../src/common/config');
+jest.mock('../src/common/config', () => ({
+  ConfigManager: jest.fn()
+}));
 
 describe('Login Command', () => {
   beforeEach(() => {
@@ -17,7 +19,9 @@ describe('Login Command', () => {
         redirectUri: 'http://custom-uri:8080',
       },
     };
-    (loadConfig as jest.Mock).mockReturnValue(mockConfig);
+    (ConfigManager as jest.Mock).mockImplementation(() => ({
+      loadConfig: jest.fn().mockReturnValue(mockConfig)
+    }));
 
     // Simplified version of the login command's action
     const oAuth2Client = new OAuth2Client(

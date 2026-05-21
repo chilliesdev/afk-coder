@@ -3,13 +3,15 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { ExecutionRuntime, RuntimeHandle, RuntimeResult } from './execution-runtime';
-import { loadTokens, refreshToken, loadConfig, TOKENS_PATH } from '../common/config';
+import { ConfigManager, TOKENS_PATH } from '../common/config';
 
 export class DockerRuntime implements ExecutionRuntime {
   private docker: Docker;
+  private readonly configManager: ConfigManager;
 
-  constructor() {
+  constructor(configManager: ConfigManager = new ConfigManager()) {
     this.docker = new Docker();
+    this.configManager = configManager;
   }
 
   /**
@@ -20,9 +22,10 @@ export class DockerRuntime implements ExecutionRuntime {
    * @returns A handle to the running process.
    */
   async run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle> {
-    await refreshToken(configDir);
-    const tokens = loadTokens(configDir);
-    const config = loadConfig(configDir);
+    const configManager = configDir ? new ConfigManager(configDir) : this.configManager;
+    await configManager.refreshToken();
+    const tokens = configManager.loadTokens();
+    const config = configManager.loadConfig();
     const hasApiKey = !!process.env['GEMINI_API_KEY'];
     const hasTokens = !!(tokens && tokens.access_token);
 

@@ -1,13 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { validateWorkflowDir } from '../src/common/validation';
+import { TaskValidator } from '../src/common/validation';
 import { DockerRuntime } from '../src/daemon/runtime-docker';
 
 // Mock Sandbox and fs
 jest.mock('fs');
 jest.mock('../src/daemon/runtime-docker');
 jest.mock('../src/cli/client', () => ({
-  sendCommand: jest.fn()
+  DaemonClient: jest.fn().mockImplementation(() => ({
+    sendCommand: jest.fn()
+  }))
 }));
 
 describe('CLI Commands', () => {
@@ -25,20 +27,21 @@ describe('CLI Commands', () => {
 
   describe('init command', () => {
     it('should call sendCommand with init options', async () => {
-      const { sendCommand } = await import('../src/cli/client');
+      const { DaemonClient } = await import('../src/cli/client');
+      const client = new DaemonClient();
       const { CONFIG_DIR } = await import('../src/common/config');
 
       const options = { dir: './test-dir', prd: 'PRD.md', force: false };
       const dir = path.resolve(options.dir);
 
-      await sendCommand('init', {
+      await client.sendCommand('init', {
         dir,
         prd: options.prd,
         force: options.force,
         configDir: CONFIG_DIR
       });
 
-      expect(sendCommand).toHaveBeenCalledWith('init', {
+      expect(client.sendCommand).toHaveBeenCalledWith('init', {
         dir,
         prd: 'PRD.md',
         force: false,
@@ -49,7 +52,9 @@ describe('CLI Commands', () => {
 
   describe('start command', () => {
     it('should use current directory if --dir is not provided', async () => {
-      const { sendCommand } = await import('../src/cli/client');
+      const { DaemonClient } = await import('../src/cli/client');
+      const client = new DaemonClient();
+      const validator = new TaskValidator();
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue('- [ ] Task 1');
 
@@ -57,20 +62,26 @@ describe('CLI Commands', () => {
       const workflowName = 'test-workflow';
       const options = { dir: undefined };
       const dir = path.resolve(options.dir || '.');
-      validateWorkflowDir(dir);
-      await sendCommand('start', { name: workflowName, dir });
+      validator.validateWorkflowDir(dir);
+      await client.sendCommand('start', { name: workflowName, dir });
 
 
-      expect(sendCommand).toHaveBeenCalledWith('start', { name: 'test-workflow', dir: path.resolve('.') });
+      expect(client.sendCommand).toHaveBeenCalledWith('start', { name: 'test-workflow', dir: path.resolve('.') });
     });
   });
 
   describe('validation', () => {
+    let validator: TaskValidator;
+
+    beforeEach(() => {
+      validator = new TaskValidator();
+    });
+
     it('should validate workflow directory', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue('- [ ] Task 1');
 
-      const result = validateWorkflowDir('./test-dir');
+      const result = validator.validateWorkflowDir('./test-dir');
       expect(result.tasks).toHaveLength(1);
       expect(result.pendingTasks).toHaveLength(1);
     });
@@ -79,7 +90,7 @@ describe('CLI Commands', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue('- [x] Task 1');
 
-      expect(() => validateWorkflowDir('./test-dir')).toThrow('No pending tasks found');
+      expect(() => validator.validateWorkflowDir('./test-dir')).toThrow('No pending tasks found');
     });
   });
 });

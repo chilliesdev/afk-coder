@@ -1,7 +1,9 @@
 import { DockerRuntime } from '../src/daemon/runtime-docker';
-import { loadTokens, refreshToken, loadConfig } from '../src/common/config';
+import { ConfigManager } from '../src/common/config';
 
-jest.mock('../src/common/config');
+jest.mock('../src/common/config', () => ({
+  ConfigManager: jest.fn()
+}));
 
 describe('Sandbox Authentication', () => {
   beforeEach(() => {
@@ -9,19 +11,21 @@ describe('Sandbox Authentication', () => {
   });
 
   it('should throw an error if no authentication is provided', async () => {
-    (loadTokens as jest.Mock).mockReturnValue(null);
-    (refreshToken as jest.Mock).mockResolvedValue(null);
-    (loadConfig as jest.Mock).mockReturnValue({
-      sandbox: {
-        image: 'test-image',
-        memory: 1234,
-        nanoCpus: 5678,
-      },
-      auth: {
-        clientId: '',
-        clientSecret: '',
-      }
-    });
+    (ConfigManager as jest.Mock).mockImplementation(() => ({
+      loadTokens: jest.fn().mockReturnValue(null),
+      refreshToken: jest.fn().mockResolvedValue(null),
+      loadConfig: jest.fn().mockReturnValue({
+        sandbox: {
+          image: 'test-image',
+          memory: 1234,
+          nanoCpus: 5678,
+        },
+        auth: {
+          clientId: '',
+          clientSecret: '',
+        }
+      })
+    }));
 
     const sandbox = new DockerRuntime();
     await expect(sandbox.run('test prompt', '/test/dir')).rejects.toThrow(

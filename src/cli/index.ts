@@ -1,9 +1,15 @@
 import { Command } from 'commander';
-import { sendCommand } from './client';
+import { DaemonClient } from './client';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
-import { validateWorkflowDir } from '../common/validation';
+import { TaskValidator } from '../common/validation';
+
+const client = new DaemonClient();
+const validator = new TaskValidator();
+
+const sendCommand = client.sendCommand.bind(client);
+const validateWorkflowDir = validator.validateWorkflowDir.bind(validator);
 
 const program = new Command();
 
@@ -50,10 +56,15 @@ program
   .description('Initiate Google OAuth 2.0 flow')
   .action(async () => {
     const { OAuth2Client } = await import('google-auth-library');
-    const { saveTokens, loadConfig, saveConfig } = await import('../common/config');
+    const { ConfigManager } = await import('../common/config');
     const http = await import('http');
     const url = await import('url');
     const readline = await import('readline');
+
+    const configManager = new ConfigManager();
+    const saveTokens = configManager.saveTokens.bind(configManager);
+    const loadConfig = configManager.loadConfig.bind(configManager);
+    const saveConfig = configManager.saveConfig.bind(configManager);
 
     const config = loadConfig();
     const envClientId = process.env.GOOGLE_CLIENT_ID;

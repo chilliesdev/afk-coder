@@ -2,10 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { 
-  loadConfig, 
-  saveConfig, 
-  loadTokens, 
-  saveTokens, 
+  ConfigManager, 
   CONFIG_DIR, 
   CONFIG_PATH, 
   TOKENS_PATH 
@@ -35,14 +32,17 @@ describe('Config Management', () => {
     refresh_token: 'test-refresh',
   };
 
+  let manager: ConfigManager;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    manager = new ConfigManager();
   });
 
   describe('loadConfig', () => {
     it('should return default config if config file does not exist', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const config = loadConfig();
+      const config = manager.loadConfig();
       expect(config.sandbox.image).toContain('gemini-cli/sandbox');
       expect(config.daemon?.socketGroup).toBe('afk-coder-users');
     });
@@ -50,7 +50,7 @@ describe('Config Management', () => {
     it('should return merged config if config file exists', () => {
       (fs.existsSync as jest.Mock).mockImplementation((p) => p === CONFIG_PATH);
       (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockConfig));
-      const config = loadConfig();
+      const config = manager.loadConfig();
       expect(config.sandbox.image).toBe('test-image');
       expect(config.daemon?.socketGroup).toBe('custom-group');
       expect(config.auth?.clientId).toBe('test-client-id');
@@ -62,7 +62,7 @@ describe('Config Management', () => {
       (fs.readFileSync as jest.Mock).mockReturnValue('invalid-json');
       // Supress console.error
       jest.spyOn(console, 'error').mockImplementation(() => {});
-      const config = loadConfig();
+      const config = manager.loadConfig();
       expect(config.sandbox.image).toContain('gemini-cli/sandbox');
       (console.error as jest.Mock).mockRestore();
     });
@@ -72,7 +72,7 @@ describe('Config Management', () => {
   describe('saveConfig', () => {
     it('should create directory if it does not exist and write file', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      saveConfig(mockConfig as any);
+      manager.saveConfig(mockConfig as any);
       expect(fs.mkdirSync).toHaveBeenCalledWith(CONFIG_DIR, { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         CONFIG_PATH, 
@@ -84,25 +84,22 @@ describe('Config Management', () => {
 
   describe('refreshToken extra', () => {
     it('should return null if no tokens', async () => {
-      const { refreshToken } = require('../src/common/config');
       jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      const result = await refreshToken();
+      const result = await manager.refreshToken();
       expect(result).toBeNull();
     });
 
     it('should return null if tokens file missing refresh_token', async () => {
-      const { refreshToken } = require('../src/common/config');
       jest.spyOn(fs, 'existsSync').mockImplementation((p: any) => {
         if (typeof p === 'string') return p.includes('tokens.json');
         return false;
       });
       jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ access_token: 'test-rt' }));
-      const result = await refreshToken();
+      const result = await manager.refreshToken();
       expect(result).toBeNull();
     });
 
     it('should return original if no client creds', async () => {
-      const { refreshToken } = require('../src/common/config');
       jest.spyOn(fs, 'existsSync').mockImplementation((p: any) => {
         if (typeof p === 'string') return p.includes('tokens.json');
         return false;
@@ -111,12 +108,11 @@ describe('Config Management', () => {
       delete process.env.GOOGLE_CLIENT_ID;
       delete process.env.GOOGLE_CLIENT_SECRET;
 
-      const result = await refreshToken();
+      const result = await manager.refreshToken();
       expect(result).toEqual({ refresh_token: 'test-rt' });
     });
 
     it('should test missing original return logic', async () => {
-      const { refreshToken } = require('../src/common/config');
       jest.spyOn(fs, 'existsSync').mockImplementation((p: any) => {
         if (typeof p === 'string') return p.includes('tokens.json');
         return false;
@@ -127,7 +123,7 @@ describe('Config Management', () => {
       process.env.GOOGLE_CLIENT_ID = 'test-id';
       delete process.env.GOOGLE_CLIENT_SECRET;
 
-      let result = await refreshToken();
+      let result = await manager.refreshToken();
       expect(result).toEqual({ refresh_token: 'test-rt' });
     });
 
@@ -145,6 +141,7 @@ describe('Config Management', () => {
 
       await jest.isolateModulesAsync(async () => {
         const configMod = require('../src/common/config');
+        const m = new configMod.ConfigManager();
         const fsMod = require('fs');
         jest.spyOn(fsMod, 'existsSync').mockImplementation((p: any) => {
           if (typeof p === 'string') return p.includes('tokens.json');
@@ -155,7 +152,7 @@ describe('Config Management', () => {
         process.env.GOOGLE_CLIENT_ID = 'test-id';
         process.env.GOOGLE_CLIENT_SECRET = 'test-secret';
 
-        const res = await configMod.refreshToken();
+        const res = await m.refreshToken();
         expect(res).toBeDefined();
         expect(res.access_token).toBe('mock-token');
       });
@@ -175,6 +172,7 @@ describe('Config Management', () => {
 
       await jest.isolateModulesAsync(async () => {
         const configMod = require('../src/common/config');
+        const m = new configMod.ConfigManager();
         const fsMod = require('fs');
         jest.spyOn(fsMod, 'existsSync').mockImplementation((p: any) => {
           if (typeof p === 'string') return p.includes('tokens.json');
@@ -185,7 +183,7 @@ describe('Config Management', () => {
         process.env.GOOGLE_CLIENT_SECRET = 'test-secret';
 
         jest.spyOn(console, 'error').mockImplementation(() => {});
-        const result = await configMod.refreshToken();
+        const result = await m.refreshToken();
         expect(result).toEqual({ refresh_token: 'test-rt' });
         (console.error as jest.Mock).mockRestore();
       });
@@ -194,34 +192,36 @@ describe('Config Management', () => {
 
   describe('config edge cases', () => {
     it('should cover custom config dir', () => {
-      const { saveConfig, loadConfig, saveTokens, loadTokens } = require('../src/common/config');
+      const { ConfigManager } = require('../src/common/config');
+      const customManager = new ConfigManager('/custom');
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ sandbox: { image: 'custom' } }));
       jest.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
       jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
 
-      const cfg = loadConfig('/custom');
+      const cfg = customManager.loadConfig();
       expect(cfg.sandbox.image).toBe('custom');
 
-      saveConfig(cfg, '/custom');
-      saveTokens({ access_token: '123' }, '/custom');
+      customManager.saveConfig(cfg);
+      customManager.saveTokens({ access_token: '123' });
 
-      const t = loadTokens('/custom');
+      const t = customManager.loadTokens();
       expect(t.sandbox).toBeDefined(); // Actually JSON.parse will return the mock object
     });
 
     it('should cover ensureConfigDir when dir does not exist', () => {
-      const { saveConfig } = require('../src/common/config');
+      const { ConfigManager } = require('../src/common/config');
+      const customManager = new ConfigManager('/custom');
       jest.spyOn(fs, 'existsSync').mockReturnValue(false);
       jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
-      saveConfig({}, '/custom');
+      customManager.saveConfig({});
     });
   });
 
   describe('saveTokens / loadTokens', () => {
 
     it('should save tokens correctly', () => {
-      saveTokens(mockTokens);
+      manager.saveTokens(mockTokens);
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         TOKENS_PATH,
         JSON.stringify(mockTokens, null, 2)
@@ -231,13 +231,13 @@ describe('Config Management', () => {
     it('should load tokens if file exists', () => {
       (fs.existsSync as jest.Mock).mockImplementation((p) => p === TOKENS_PATH);
       (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockTokens));
-      const tokens = loadTokens();
+      const tokens = manager.loadTokens();
       expect(tokens).toEqual(mockTokens);
     });
 
     it('should return null if tokens file does not exist', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
-      const tokens = loadTokens();
+      const tokens = manager.loadTokens();
       expect(tokens).toBeNull();
     });
   });

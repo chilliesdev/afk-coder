@@ -1,13 +1,18 @@
-import { parseAgentOutput, OutcomeAnalyzer } from '../src/daemon/agent-outcome';
+import { OutcomeAnalyzer } from '../src/daemon/agent-outcome';
 
 describe('AgentOutcome', () => {
+  let analyzer: OutcomeAnalyzer;
+
+  beforeEach(() => {
+    analyzer = new OutcomeAnalyzer(3);
+  });
   it('should parse successful execution with token usage', () => {
     const logs = `
 Some logs here...
 Token usage: 100 prompt, 50 completion
 Done!
     `;
-    const outcome = parseAgentOutput(logs, 0);
+    const outcome = analyzer.parseAgentOutput(logs, 0);
     expect(outcome.success).toBe(true);
     expect(outcome.tokens.input).toBe(100);
     expect(outcome.tokens.output).toBe(50);
@@ -26,7 +31,7 @@ Done!
     ];
 
     patterns.forEach(p => {
-      const outcome = parseAgentOutput(p.logs, 0);
+      const outcome = analyzer.parseAgentOutput(p.logs, 0);
       expect(outcome.tokens.input).toBe(p.input);
       expect(outcome.tokens.output).toBe(p.output);
     });
@@ -34,7 +39,7 @@ Done!
 
   it('should classify Quota errors', () => {
     const logs = 'Error: 429 Too Many Requests. Quota exceeded.';
-    const outcome = parseAgentOutput(logs, 1);
+    const outcome = analyzer.parseAgentOutput(logs, 1);
     expect(outcome.success).toBe(false);
     expect(outcome.error?.type).toBe('Quota');
     expect(outcome.error?.message).toContain('quota exceeded');
@@ -42,7 +47,7 @@ Done!
 
   it('should classify Safety errors', () => {
     const logs = 'Candidate was blocked due to safety reasons.';
-    const outcome = parseAgentOutput(logs, 1);
+    const outcome = analyzer.parseAgentOutput(logs, 1);
     expect(outcome.success).toBe(false);
     expect(outcome.error?.type).toBe('Safety');
     expect(outcome.error?.message).toContain('safety filters');
@@ -50,7 +55,7 @@ Done!
 
   it('should classify NoProgress errors', () => {
     const logs = 'I am stuck and no progress could be made.';
-    const outcome = parseAgentOutput(logs, 1);
+    const outcome = analyzer.parseAgentOutput(logs, 1);
     expect(outcome.success).toBe(false);
     expect(outcome.error?.type).toBe('NoProgress');
     expect(outcome.error?.message).toContain('no progress');
@@ -58,7 +63,7 @@ Done!
 
   it('should default to Runtime error for unknown failure', () => {
     const logs = 'Some random crash';
-    const outcome = parseAgentOutput(logs, 127);
+    const outcome = analyzer.parseAgentOutput(logs, 127);
     expect(outcome.success).toBe(false);
     expect(outcome.error?.type).toBe('Runtime');
     expect(outcome.error?.message).toBe('Agent exited with code 127');
@@ -66,7 +71,7 @@ Done!
 
   it('should still extract tokens even on failure', () => {
     const logs = 'Error: 429 Too Many Requests. Usage: 10 prompt, 20 completion';
-    const outcome = parseAgentOutput(logs, 1);
+    const outcome = analyzer.parseAgentOutput(logs, 1);
     expect(outcome.success).toBe(false);
     expect(outcome.tokens.total).toBe(30);
     expect(outcome.error?.type).toBe('Quota');

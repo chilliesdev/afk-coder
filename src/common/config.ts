@@ -44,88 +44,95 @@ const DEFAULT_CONFIG: Config = {
 };
 
 
-export function ensureConfigDir(configDir?: string) {
-  const dir = configDir || CONFIG_DIR;
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+export class ConfigManager {
+  private readonly configDir: string;
+  private readonly tokensPath: string;
+  private readonly configPath: string;
 
-export function loadConfig(configDir?: string): Config {
-  const configPath = configDir ? path.join(configDir, 'config.json') : CONFIG_PATH;
-  if (!fs.existsSync(configPath)) {
-    return DEFAULT_CONFIG;
-  }
-  try {
-    const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    return {
-      ...DEFAULT_CONFIG,
-      ...userConfig,
-      sandbox: {
-        ...DEFAULT_CONFIG.sandbox,
-        ...userConfig.sandbox,
-      },
-      daemon: {
-        ...DEFAULT_CONFIG.daemon,
-        ...userConfig.daemon,
-      },
-      auth: {
-        ...DEFAULT_CONFIG.auth,
-        ...userConfig.auth,
-      },
-    } as Config;
-  } catch (error) {
-    console.error('Error loading config, using defaults:', error);
-    return DEFAULT_CONFIG;
-  }
-}
-
-export function saveConfig(config: Config, configDir?: string) {
-  ensureConfigDir(configDir);
-  const configPath = configDir ? path.join(configDir, 'config.json') : CONFIG_PATH;
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-}
-
-export function saveTokens(tokens: any, configDir?: string) {
-  ensureConfigDir(configDir);
-  const tokensPath = configDir ? path.join(configDir, 'tokens.json') : TOKENS_PATH;
-  fs.writeFileSync(tokensPath, JSON.stringify(tokens, null, 2));
-}
-
-export function loadTokens(configDir?: string) {
-  const tokensPath = configDir ? path.join(configDir, 'tokens.json') : TOKENS_PATH;
-  if (!fs.existsSync(tokensPath)) {
-    return null;
-  }
-  return JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
-}
-
-export async function refreshToken(configDir?: string) {
-  const tokens = loadTokens(configDir);
-  if (!tokens || !tokens.refresh_token) {
-    return null;
+  constructor(configDir?: string) {
+    this.configDir = configDir || CONFIG_DIR;
+    this.tokensPath = path.join(this.configDir, 'tokens.json');
+    this.configPath = path.join(this.configDir, 'config.json');
   }
 
-  const { OAuth2Client } = await import('google-auth-library');
-  const config = loadConfig(configDir);
-  
-  const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.auth?.clientSecret;
-
-  if (!clientId || !clientSecret) {
-    return tokens; // Can't refresh without credentials, return original
+  ensureConfigDir(): void {
+    if (!fs.existsSync(this.configDir)) {
+      fs.mkdirSync(this.configDir, { recursive: true });
+    }
   }
 
-  const oAuth2Client = new OAuth2Client(clientId, clientSecret);
-  oAuth2Client.setCredentials(tokens);
+  loadConfig(): Config {
+    if (!fs.existsSync(this.configPath)) {
+      return DEFAULT_CONFIG;
+    }
+    try {
+      const userConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf-8'));
+      return {
+        ...DEFAULT_CONFIG,
+        ...userConfig,
+        sandbox: {
+          ...DEFAULT_CONFIG.sandbox,
+          ...userConfig.sandbox,
+        },
+        daemon: {
+          ...DEFAULT_CONFIG.daemon,
+          ...userConfig.daemon,
+        },
+        auth: {
+          ...DEFAULT_CONFIG.auth,
+          ...userConfig.auth,
+        },
+      } as Config;
+    } catch (error) {
+      console.error('Error loading config, using defaults:', error);
+      return DEFAULT_CONFIG;
+    }
+  }
 
-  try {
-    const { credentials } = await oAuth2Client.refreshAccessToken();
-    const updatedTokens = { ...tokens, ...credentials };
-    saveTokens(updatedTokens, configDir);
-    return updatedTokens;
-  } catch (error) {
-    console.error('Error refreshing access token:', error);
-    return tokens;
+  saveConfig(config: Config): void {
+    this.ensureConfigDir();
+    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
+  }
+
+  saveTokens(tokens: any): void {
+    this.ensureConfigDir();
+    fs.writeFileSync(this.tokensPath, JSON.stringify(tokens, null, 2));
+  }
+
+  loadTokens(): any {
+    if (!fs.existsSync(this.tokensPath)) {
+      return null;
+    }
+    return JSON.parse(fs.readFileSync(this.tokensPath, 'utf-8'));
+  }
+
+  async refreshToken(): Promise<any> {
+    const tokens = this.loadTokens();
+    if (!tokens || !tokens.refresh_token) {
+      return null;
+    }
+
+    const { OAuth2Client } = await import('google-auth-library');
+    const config = this.loadConfig();
+    
+    const clientId = process.env.GOOGLE_CLIENT_ID || config.auth?.clientId;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.auth?.clientSecret;
+
+    if (!clientId || !clientSecret) {
+      return tokens;
+    }
+
+    const oAuth2Client = new OAuth2Client(clientId, clientSecret);
+    oAuth2Client.setCredentials(tokens);
+
+    try {
+      const { credentials } = await oAuth2Client.refreshAccessToken();
+      const updatedTokens = { ...tokens, ...credentials };
+      this.saveTokens(updatedTokens);
+      return updatedTokens;
+    } catch (error) {
+      console.error('Error refreshing access token:', error);
+      return tokens;
+    }
   }
 }
