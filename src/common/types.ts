@@ -58,6 +58,9 @@ export interface Workflow {
   currentTask?: string;
   recentTasks: string[];
   configDir?: string;
+  isWorktree?: boolean;
+  sourceRepo?: string;
+  branch?: string;
 }
 
 export interface DaemonResponse<T = any> {

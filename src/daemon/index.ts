@@ -67,7 +67,12 @@ const server = net.createServer((socket) => {
           break;
         }
         case 'start': {
-          const workflow = await workflowManager.startWorkflow(request.args.name, request.args.dir, request.args.configDir);
+          const workflow = await workflowManager.startWorkflow(request.args.name, request.args.dir, {
+            configDir: request.args.configDir,
+            isWorktree: request.args.isWorktree,
+            sourceRepo: request.args.sourceRepo,
+            branch: request.args.branch,
+          });
           response = { success: true, data: workflow };
           break;
         }

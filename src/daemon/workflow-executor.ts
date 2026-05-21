@@ -14,6 +14,9 @@ export class WorkflowExecutor {
   public recentTasks: string[] = [];
   public currentTask?: string;
   public pid?: number;
+  public isWorktree?: boolean;
+  public sourceRepo?: string;
+  public branch?: string;
 
   private stopHandle?: () => Promise<void>;
   private agent: Agent;
@@ -29,6 +32,9 @@ export class WorkflowExecutor {
     taskBoard: ITaskBoard,
     logger: winston.Logger,
     configDir?: string,
+    isWorktree?: boolean,
+    sourceRepo?: string,
+    branch?: string,
     analyzer: OutcomeAnalyzer = new OutcomeAnalyzer()
   ) {
     this.name = name;
@@ -37,6 +43,9 @@ export class WorkflowExecutor {
     this.taskBoard = taskBoard;
     this.logger = logger;
     this.configDir = configDir;
+    this.isWorktree = isWorktree;
+    this.sourceRepo = sourceRepo;
+    this.branch = branch;
     this.analyzer = analyzer;
     this.uptimeStart = Date.now();
   }
@@ -246,6 +255,9 @@ export class WorkflowExecutor {
       currentTask: this.currentTask,
       pid: this.pid,
       configDir: this.configDir,
+      isWorktree: this.isWorktree,
+      sourceRepo: this.sourceRepo,
+      branch: this.branch,
     };
   }
 }

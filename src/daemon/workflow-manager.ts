@@ -1,6 +1,7 @@
 import { Workflow, Task, TaskBoard as ITaskBoard } from '../common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
 import { FileSystemTaskStorage } from './task-storage';
@@ -47,14 +48,26 @@ export class WorkflowManager {
     return logger;
   }
 
-  async startWorkflow(name: string, dir: string, configDir?: string): Promise<Workflow> {
+  async startWorkflow(name: string, dir: string, options: { configDir?: string, isWorktree?: boolean, sourceRepo?: string, branch?: string } = {}): Promise<Workflow> {
     const existing = this.workflows.get(name);
     if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed') && existing.status !== 'Killed') {
       throw new Error(`Workflow ${name} is already running`);
     }
 
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      if (options.isWorktree && options.sourceRepo && options.branch) {
+        // Create the worktree branch. If it exists, checkout, else create it.
+        try {
+          execSync(`git show-branch ${options.branch}`, { stdio: 'ignore', cwd: options.sourceRepo });
+          // Branch exists, create worktree from it
+          execSync(`git worktree add "${dir}" ${options.branch}`, { cwd: options.sourceRepo });
+        } catch {
+          // Branch doesn't exist, create it via worktree add -b
+          execSync(`git worktree add -b ${options.branch} "${dir}"`, { cwd: options.sourceRepo });
+        }
+      } else {
+        fs.mkdirSync(dir, { recursive: true });
+      }
     }
 
     const tasksPath = path.join(dir, 'tasks.md');
@@ -82,7 +95,10 @@ export class WorkflowManager {
       this.agent,
       taskBoard,
       logger,
-      configDir,
+      options.configDir,
+      options.isWorktree,
+      options.sourceRepo,
+      options.branch,
       this.evaluator
     );
 
@@ -121,6 +137,14 @@ export class WorkflowManager {
 
     if (executor.status !== 'Done' && !executor.status.startsWith('Failed') && executor.status !== 'Killed') {
       throw new Error(`Workflow ${name} is still running. Kill it first.`);
+    }
+
+    if (executor.isWorktree && executor.sourceRepo) {
+      try {
+        execSync(`git worktree remove --force "${executor.dir}"`, { cwd: executor.sourceRepo });
+      } catch (err: any) {
+        console.error(`Failed to remove worktree: ${err.message}`);
+      }
     }
 
     this.workflows.delete(name);

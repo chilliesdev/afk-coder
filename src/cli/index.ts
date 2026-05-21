@@ -239,23 +239,43 @@ program
   .command('start <workflow_name>')
   .description('Start a new workflow')
   .option('--dir <path>', 'Implementation directory')
+  .option('--worktree', 'Create a git worktree for this workflow')
+  .option('--branch <name>', 'Branch name to use for the worktree')
   .action(async (workflowName, options) => {
     try {
       const dir = path.resolve(options.dir || '.');
 
       // Validate locally before sending to daemon
       try {
-        validateWorkflowDir(dir);
+        if (!options.worktree) {
+          validateWorkflowDir(dir);
+        }
       } catch (error: any) {
         console.error(`Validation failed: ${error.message}`);
         return;
+      }
+
+      let sourceRepo: string | undefined;
+      let branch: string | undefined;
+
+      if (options.worktree) {
+        try {
+          sourceRepo = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+        } catch {
+          console.error('Validation failed: --worktree must be run from inside a git repository');
+          return;
+        }
+        branch = options.branch || `workflow/${workflowName}`;
       }
 
       const { CONFIG_DIR } = await import('../common/config');
       const response = await sendCommand('start', { 
         name: workflowName, 
         dir,
-        configDir: CONFIG_DIR
+        configDir: CONFIG_DIR,
+        isWorktree: options.worktree,
+        sourceRepo,
+        branch
       });
       if (!response.success) {
         console.error(`Failed to start workflow: ${response.message}`);

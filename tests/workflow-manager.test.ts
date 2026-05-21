@@ -5,6 +5,11 @@ import { InMemoryTaskStorage } from '../src/daemon/task-storage';
 import { Agent } from '../src/daemon/agent';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'node:child_process';
+
+jest.mock('node:child_process', () => ({
+  execSync: jest.fn()
+}));
 
 describe('WorkflowManager', () => {
   let workflowManager: WorkflowManager;
@@ -25,6 +30,7 @@ describe('WorkflowManager', () => {
     fs.mkdirSync(testDir);
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD\nTest PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
+    (execSync as jest.Mock).mockClear();
 
     mockRuntime = new MockRuntime();
     inMemoryStorage = new InMemoryTaskStorage('- [ ] Task 1');
@@ -206,5 +212,105 @@ describe('WorkflowManager', () => {
     expect(workflow.status).toBe('Done');
     expect(workflow.recentTasks).toContain('Task 2');
     expect(workflow.tokenUsage.input).toBeGreaterThanOrEqual(10);
+  });
+
+  describe('Git Worktree Support', () => {
+    it('should create a worktree when isWorktree is true and branch exists', async () => {
+      await resetBoard('- [ ] Task 1');
+      fs.rmSync(testDir, { recursive: true, force: true });
+      
+      // Simulate branch exists and worktree creation
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.startsWith('git worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+          fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
+        }
+        return Buffer.from('');
+      });
+
+      await workflowManager.startWorkflow('wt-test1', testDir, {
+        isWorktree: true,
+        sourceRepo: '/mock/repo',
+        branch: 'workflow/wt-test1'
+      });
+
+      expect(execSync).toHaveBeenCalledWith(
+        'git show-branch workflow/wt-test1',
+        expect.objectContaining({ cwd: '/mock/repo' })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        `git worktree add "${testDir}" workflow/wt-test1`,
+        expect.objectContaining({ cwd: '/mock/repo' })
+      );
+
+      const workflow = workflowManager.getWorkflow('wt-test1')!;
+      expect(workflow.isWorktree).toBe(true);
+      expect(workflow.sourceRepo).toBe('/mock/repo');
+      expect(workflow.branch).toBe('workflow/wt-test1');
+      
+      await workflowManager.killWorkflow('wt-test1');
+    });
+
+    it('should create a worktree with new branch when branch does not exist', async () => {
+      await resetBoard('- [ ] Task 1');
+      fs.rmSync(testDir, { recursive: true, force: true });
+      
+      // Simulate branch does not exist, then create worktree
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.startsWith('git show-branch')) {
+          throw new Error('Branch not found');
+        }
+        if (cmd.startsWith('git worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+          fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
+        }
+        return Buffer.from('');
+      });
+
+      await workflowManager.startWorkflow('wt-test2', testDir, {
+        isWorktree: true,
+        sourceRepo: '/mock/repo',
+        branch: 'workflow/wt-test2'
+      });
+
+      expect(execSync).toHaveBeenCalledWith(
+        'git show-branch workflow/wt-test2',
+        expect.objectContaining({ cwd: '/mock/repo' })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        `git worktree add -b workflow/wt-test2 "${testDir}"`,
+        expect.objectContaining({ cwd: '/mock/repo' })
+      );
+      
+      await workflowManager.killWorkflow('wt-test2');
+    });
+
+    it('should remove worktree properly', async () => {
+      await resetBoard('- [ ] Task 1');
+      
+      // Setup worktree workflow
+      (execSync as jest.Mock).mockImplementationOnce(() => Buffer.from(''));
+      await workflowManager.startWorkflow('wt-test3', testDir, {
+        isWorktree: true,
+        sourceRepo: '/mock/repo',
+        branch: 'workflow/wt-test3'
+      });
+
+      // Mark as done
+      const executor = (workflowManager as any).workflows.get('wt-test3');
+      executor.status = 'Done';
+
+      // Clear mock so we can just check remove
+      (execSync as jest.Mock).mockClear();
+
+      workflowManager.removeWorkflow('wt-test3');
+
+      expect(execSync).toHaveBeenCalledWith(
+        `git worktree remove --force "${testDir}"`,
+        expect.objectContaining({ cwd: '/mock/repo' })
+      );
+    });
   });
 });
