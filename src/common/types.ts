@@ -22,11 +22,18 @@ export interface Task {
   description: string;
 }
 
+export interface TaskBoardState {
+  progress: { completed: number; total: number; percentage: string };
+  pendingTasks: Task[];
+  tasks: Task[];
+}
+
 export interface TaskBoard {
-  sync(): Promise<void>;
-  getPendingTasks(): Task[];
-  getNewlyCompleted(previousSnapshot: Task[]): Task[];
-  getProgress(): { completed: number; total: number; percentage: string };
+  load(): Promise<TaskBoardState>;
+  reconcile(): Promise<{
+    newlyCompleted: Task[];
+    state: TaskBoardState;
+  }>;
   getTasks(): Task[];
 }
 

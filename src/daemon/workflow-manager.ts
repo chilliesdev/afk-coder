@@ -70,10 +70,10 @@ export class WorkflowManager {
     }
 
     const taskBoard = this.taskBoardFactory(tasksPath);
-    await taskBoard.sync();
+    const boardState = await taskBoard.load();
     
-    const progress = taskBoard.getProgress();
-    const pendingTasks = taskBoard.getPendingTasks();
+    const progress = boardState.progress;
+    const pendingTasks = boardState.pendingTasks;
 
     if (pendingTasks.length === 0) {
       throw new Error(`No pending tasks found in tasks.md in ${dir}`);
@@ -108,9 +108,9 @@ export class WorkflowManager {
     const logger = this.getOrCreateLogger(workflow.name, workflow.dir);
 
     while (workflow.status !== 'Failed' && workflow.status !== 'Done') {
-      await taskBoard.sync();
-      const pendingTasks = taskBoard.getPendingTasks();
-      const progress = taskBoard.getProgress();
+      const boardState = await taskBoard.load();
+      const pendingTasks = boardState.pendingTasks;
+      const progress = boardState.progress;
 
       workflow.progress = `${progress.completed}/${progress.total}`;
 
@@ -129,7 +129,6 @@ export class WorkflowManager {
 
       while (retries <= maxRetries && !success) {
         try {
-          const previousTasks = taskBoard.getTasks();
           const prompt = this.strategy.getAutonomousLoopPrompt();
           const run = await this.runtime.run(prompt, workflow.dir, workflow.configDir);
           
@@ -157,9 +156,10 @@ export class WorkflowManager {
           workflow.tokenUsage.total += outcome.tokens.total;
 
           if (outcome.success) {
-            // Sync task board to see what changed
-            await taskBoard.sync();
-            const newlyCompletedTasks = taskBoard.getNewlyCompleted(previousTasks);
+            // Reconcile task board changes and obtain updated state
+            const reconciliation = await taskBoard.reconcile();
+            const newlyCompletedTasks = reconciliation.newlyCompleted;
+            const updatedState = reconciliation.state;
             
             if (newlyCompletedTasks.length === 0) {
               throw new Error(`No tasks were marked as completed in tasks.md`);
@@ -174,8 +174,7 @@ export class WorkflowManager {
             }
             workflow.currentTask = undefined;
 
-            const newProgress = taskBoard.getProgress();
-            workflow.progress = `${newProgress.completed}/${newProgress.total}`;
+            workflow.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
 
             logger.info('Tasks completed successfully', { 
               completedTasks: newlyCompletedTasks.map(t => t.description), 

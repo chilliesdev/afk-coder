@@ -49,16 +49,12 @@ describe('WorkflowManager', () => {
       exitCode: 0,
       logs: 'Success! Tokens: 10 in, 20 out'
     };
-
-    // Simulate task completion on next sync
-    const originalSync = mockTaskBoard.sync.bind(mockTaskBoard);
-    mockTaskBoard.sync = async () => {
-      await originalSync();
-      if (mockTaskBoard.syncCalled === 3) { // 1 in startWorkflow, 1 in first loop, 1 after agent run
-        mockTaskBoard.tasks[0].completed = true;
-      }
+    // Simulate task completion on next reconcile
+    const originalReconcile = mockTaskBoard.reconcile.bind(mockTaskBoard);
+    mockTaskBoard.reconcile = async () => {
+      mockTaskBoard.tasks[0].completed = true;
+      return await originalReconcile();
     };
-
     const workflow = await workflowManager.startWorkflow('test', testDir);
     
     const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));

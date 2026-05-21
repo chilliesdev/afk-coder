@@ -1,16 +1,44 @@
 import * as fs from 'fs';
-import { Task, TaskBoard as ITaskBoard } from '../common/types';
+import { Task, TaskBoard as ITaskBoard, TaskBoardState } from '../common/types';
 import { parseTasks, validateTasks } from '../common/validation';
 
 export class TaskBoard implements ITaskBoard {
   private tasks: Task[] = [];
+  private baseline: Task[] = [];
   private tasksPath: string;
 
   constructor(tasksPath: string) {
     this.tasksPath = tasksPath;
   }
 
-  async sync(): Promise<void> {
+  async load(): Promise<TaskBoardState> {
+    await this.sync();
+    this.baseline = this.tasks.map(t => ({ ...t }));
+    return this.getState();
+  }
+
+  async reconcile(): Promise<{ newlyCompleted: Task[]; state: TaskBoardState }> {
+    const previousSnapshot = [...this.baseline];
+    await this.sync();
+
+    const newlyCompleted = this.tasks.filter(currentTask => {
+      if (!currentTask.completed) return false;
+      const prevTask = previousSnapshot.find(t => t.description === currentTask.description);
+      return !prevTask || !prevTask.completed;
+    });
+
+    this.baseline = this.tasks.map(t => ({ ...t }));
+    return {
+      newlyCompleted,
+      state: this.getState()
+    };
+  }
+
+  getTasks(): Task[] {
+    return this.tasks.map(t => ({ ...t }));
+  }
+
+  private async sync(): Promise<void> {
     if (!fs.existsSync(this.tasksPath)) {
       this.tasks = [];
       return;
@@ -20,26 +48,15 @@ export class TaskBoard implements ITaskBoard {
     this.tasks = parseTasks(content);
   }
 
-  getPendingTasks(): Task[] {
-    return this.tasks.filter(t => !t.completed);
-  }
-
-  getNewlyCompleted(previousSnapshot: Task[]): Task[] {
-    return this.tasks.filter(currentTask => {
-      if (!currentTask.completed) return false;
-      const prevTask = previousSnapshot.find(t => t.description === currentTask.description);
-      return !prevTask || !prevTask.completed;
-    });
-  }
-
-  getProgress(): { completed: number; total: number; percentage: string } {
+  private getState(): TaskBoardState {
     const total = this.tasks.length;
     const completed = this.tasks.filter(t => t.completed).length;
     const percentage = total === 0 ? '0%' : `${Math.round((completed / total) * 100)}%`;
-    return { completed, total, percentage };
-  }
-
-  getTasks(): Task[] {
-    return this.tasks.map(t => ({ ...t }));
+    const pendingTasks = this.tasks.filter(t => !t.completed);
+    return {
+      progress: { completed, total, percentage },
+      pendingTasks,
+      tasks: this.getTasks()
+    };
   }
 }

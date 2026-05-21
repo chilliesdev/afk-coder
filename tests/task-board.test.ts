@@ -23,14 +23,14 @@ describe('TaskBoard', () => {
     fs.writeFileSync(TASKS_PATH, content);
 
     const board = new TaskBoard(TASKS_PATH);
-    await board.sync();
+    const state = await board.load();
 
-    const pending = board.getPendingTasks();
+    const pending = state.pendingTasks;
     expect(pending).toHaveLength(2);
     expect(pending[0].description).toBe('Task 2');
     expect(pending[1].description).toBe('Task 3');
 
-    const progress = board.getProgress();
+    const progress = state.progress;
     expect(progress.completed).toBe(1);
     expect(progress.total).toBe(3);
     expect(progress.percentage).toBe('33%');
@@ -40,15 +40,15 @@ describe('TaskBoard', () => {
     fs.writeFileSync(TASKS_PATH, '');
 
     const board = new TaskBoard(TASKS_PATH);
-    await expect(board.sync()).rejects.toThrow('No tasks found in tasks.md');
+    await expect(board.load()).rejects.toThrow('No tasks found in tasks.md');
   });
 
   it('should handle non-existent tasks.md', async () => {
     const board = new TaskBoard(path.join(TEST_DIR, 'non-existent.md'));
-    await board.sync();
+    const state = await board.load();
 
-    expect(board.getPendingTasks()).toHaveLength(0);
-    expect(board.getProgress().total).toBe(0);
+    expect(state.pendingTasks).toHaveLength(0);
+    expect(state.progress.total).toBe(0);
   });
 
   it('should identify newly completed tasks', async () => {
@@ -56,17 +56,17 @@ describe('TaskBoard', () => {
     fs.writeFileSync(TASKS_PATH, initialContent);
 
     const board = new TaskBoard(TASKS_PATH);
-    await board.sync();
-    const snapshot1 = board.getTasks();
+    await board.load();
 
     // Mark Task 1 as completed
     const updatedContent = `- [x] Task 1\n- [ ] Task 2`;
     fs.writeFileSync(TASKS_PATH, updatedContent);
-    await board.sync();
+    const reconciliation = await board.reconcile();
 
-    const newlyCompleted = board.getNewlyCompleted(snapshot1);
-    expect(newlyCompleted).toHaveLength(1);
-    expect(newlyCompleted[0].description).toBe('Task 1');
+    expect(reconciliation.newlyCompleted).toHaveLength(1);
+    expect(reconciliation.newlyCompleted[0].description).toBe('Task 1');
+    expect(reconciliation.state.progress.completed).toBe(1);
+    expect(reconciliation.state.progress.total).toBe(2);
   });
 
   it('should handle malformed tasks.md', async () => {
@@ -74,10 +74,10 @@ describe('TaskBoard', () => {
     fs.writeFileSync(TASKS_PATH, content);
 
     const board = new TaskBoard(TASKS_PATH);
-    await board.sync();
+    const state = await board.load();
 
-    expect(board.getPendingTasks()).toHaveLength(1);
-    expect(board.getPendingTasks()[0].description).toBe('Valid Task');
-    expect(board.getProgress().total).toBe(2);
+    expect(state.pendingTasks).toHaveLength(1);
+    expect(state.pendingTasks[0].description).toBe('Valid Task');
+    expect(state.progress.total).toBe(2);
   });
 });
