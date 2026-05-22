@@ -82,7 +82,7 @@ describe('WorkflowManager', () => {
 
     workflow = workflowManager.getWorkflow('test')!;
     expect(workflow.status).toBe('Done');
-    expect(workflow.tokenUsage).toEqual({ input: 10, output: 20, total: 30 });
+    expect(workflow.tokenUsage).toEqual({ input: 20, output: 40, total: 60 });
     expect(workflow.recentTasks).toContain('Task 1');
   });
 

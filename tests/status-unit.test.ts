@@ -88,9 +88,9 @@ describe('WorkflowManager Status Updates', () => {
 
     expect(workflow.status).toBe('Done');
     expect(workflow.tokenUsage).toEqual({ 
-      input: 60, // 6 tasks * 10
-      output: 30, // 6 tasks * 5
-      total: 90 
+      input: 70, // 6 coding tasks * 10 + 1 QA loop * 10
+      output: 35, // 6 coding tasks * 5 + 1 QA loop * 5
+      total: 105 
     });
     
     // Recent tasks should be capped at 5 and in reverse order (newest first)

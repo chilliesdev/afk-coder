@@ -98,8 +98,7 @@ export class WorkflowManager {
       options.configDir,
       options.isWorktree,
       options.sourceRepo,
-      options.branch,
-      this.evaluator
+      options.branch
     );
 
     this.workflows.set(name, executor);
