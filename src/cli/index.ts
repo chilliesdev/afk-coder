@@ -330,6 +330,11 @@ program
         console.error(`Failed to list workflows: ${response.message}`);
         return;
       }
+
+      if (!response.data || response.data.length === 0) {
+        console.log('No active workflows found. Use "afk-coder start <workflow_name>" to start one.');
+        return;
+      }
       
       const formattedData = response.data.map((w: any) => {
         const s = Math.floor(w.uptime / 1000);
@@ -341,7 +346,7 @@ program
           status: w.status,
           progress: w.progress,
           phase: w.phase || 'Coding',
-          'QA Cycles': w.qaCycles !== undefined ? `${w.qaCycles}/3` : '0/3',
+          'QA Cycles': w.qaCycles === undefined ? '0/3' : `${w.qaCycles}/3`,
           uptime: `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`,
         };
       });
@@ -391,7 +396,7 @@ program
       console.log(`${colors.bold}Directory:${colors.reset} ${w.dir}`);
       console.log(`${colors.bold}Progress:${colors.reset}  ${w.progress}`);
       console.log(`${colors.bold}Phase:${colors.reset}     ${w.phase || 'Coding'}`);
-      console.log(`${colors.bold}QA Cycle:${colors.reset}  ${w.qaCycles !== undefined ? w.qaCycles : 0}/3`);
+      console.log(`${colors.bold}QA Cycle:${colors.reset}  ${w.qaCycles === undefined ? 0 : w.qaCycles}/3`);
       console.log('');
       console.log(`${colors.bold}Current Task:${colors.reset}`);
       console.log(`  ${w.currentTask || 'None'}`);
@@ -399,9 +404,9 @@ program
       console.log(`${colors.bold}Recent Tasks:${colors.reset}`);
       if (!w.recentTasks || w.recentTasks.length === 0) {
         console.log('  None');
-        return;
+      } else {
+        w.recentTasks.forEach((task: string) => console.log(`  - ${task}`));
       }
-      w.recentTasks.forEach((task: string) => console.log(`  - ${task}`));
       console.log('');
       console.log(`${colors.bold}Token Usage:${colors.reset}`);
       console.log(`  Input:  ${w.tokenUsage.input.toLocaleString()}`);
