@@ -313,4 +313,158 @@ describe('WorkflowManager', () => {
       );
     });
   });
+
+  describe('QA Phase', () => {
+    const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
+
+    it('should transition to QA Phase and complete if no new tasks are added', async () => {
+      await resetBoard('- [ ] Task 1');
+
+      // Coder run succeeds and completes Task 1
+      mockRuntime.nextResult = { exitCode: 0, logs: 'Code Done' };
+      
+      const originalRun = mockRuntime.run.bind(mockRuntime);
+      mockRuntime.run = async (prompt, dir, configDir) => {
+        const handle = await originalRun(prompt, dir, configDir);
+        const originalWait = handle.wait.bind(handle);
+        handle.wait = async () => {
+          if (prompt.includes('Open tasks.md and identify')) {
+            await inMemoryStorage.write('- [x] Task 1');
+            fs.writeFileSync(path.join(dir, 'tasks.md'), '- [x] Task 1');
+          }
+          return await originalWait();
+        };
+        return handle;
+      };
+
+      await workflowManager.startWorkflow('qa-success', testDir);
+
+      let attempts = 0;
+      let workflow = workflowManager.getWorkflow('qa-success');
+      while (workflow && workflow.status !== 'Done' && attempts < 100) {
+        await jest.advanceTimersByTimeAsync(5000);
+        await flushPromises();
+        workflow = workflowManager.getWorkflow('qa-success');
+        attempts++;
+      }
+
+      workflow = workflowManager.getWorkflow('qa-success')!;
+      expect(workflow.status).toBe('Done');
+      expect(workflow.phase).toBe('QA');
+      expect(workflow.qaCycles).toBe(0);
+    });
+
+    it('should transition back to Coding if QA adds tasks with valid PRD tags', async () => {
+      await resetBoard('- [ ] Task 1');
+      mockRuntime.nextResult = { exitCode: 0, logs: 'Done' };
+
+      const originalRun = mockRuntime.run.bind(mockRuntime);
+      mockRuntime.run = async (prompt, dir, configDir) => {
+        const handle = await originalRun(prompt, dir, configDir);
+        const originalWait = handle.wait.bind(handle);
+        handle.wait = async () => {
+          if (prompt.includes('Open tasks.md and identify')) {
+            await inMemoryStorage.write('- [x] Task 1');
+            fs.writeFileSync(path.join(dir, 'tasks.md'), '- [x] Task 1');
+          } else if (prompt.includes('Read the PRD.md file and examine the codebase')) {
+            await inMemoryStorage.write('- [x] Task 1\n- [ ] QA Bug [PRD: Section 1]');
+            fs.writeFileSync(path.join(dir, 'tasks.md'), '- [x] Task 1\n- [ ] QA Bug [PRD: Section 1]');
+          }
+          return await originalWait();
+        };
+        return handle;
+      };
+
+      await workflowManager.startWorkflow('qa-retry', testDir);
+
+      let workflow = workflowManager.getWorkflow('qa-retry');
+      let attempts = 0;
+      while (workflow && workflow.qaCycles === 0 && attempts < 100) {
+        await jest.advanceTimersByTimeAsync(5000);
+        await flushPromises();
+        workflow = workflowManager.getWorkflow('qa-retry');
+        attempts++;
+      }
+
+      workflow = workflowManager.getWorkflow('qa-retry')!;
+      expect(workflow.phase).toBe('Coding');
+      expect(workflow.qaCycles).toBe(1);
+
+      await workflowManager.killWorkflow('qa-retry');
+    });
+
+    it('should fail with QA Task Validation Error if a new task lacks PRD tag', async () => {
+      await resetBoard('- [ ] Task 1');
+      mockRuntime.nextResult = { exitCode: 0, logs: 'Done' };
+
+      const originalRun = mockRuntime.run.bind(mockRuntime);
+      mockRuntime.run = async (prompt, dir, configDir) => {
+        const handle = await originalRun(prompt, dir, configDir);
+        const originalWait = handle.wait.bind(handle);
+        handle.wait = async () => {
+          if (prompt.includes('Open tasks.md and identify')) {
+            await inMemoryStorage.write('- [x] Task 1');
+            fs.writeFileSync(path.join(dir, 'tasks.md'), '- [x] Task 1');
+          } else if (prompt.includes('Read the PRD.md file and examine the codebase')) {
+            await inMemoryStorage.write('- [x] Task 1\n- [ ] Untraced QA Bug');
+            fs.writeFileSync(path.join(dir, 'tasks.md'), '- [x] Task 1\n- [ ] Untraced QA Bug');
+          }
+          return await originalWait();
+        };
+        return handle;
+      };
+
+      await workflowManager.startWorkflow('qa-val-fail', testDir);
+
+      let workflow = workflowManager.getWorkflow('qa-val-fail');
+      let attempts = 0;
+      while (workflow && !workflow.status.startsWith('Failed') && attempts < 100) {
+        await jest.advanceTimersByTimeAsync(5000);
+        await flushPromises();
+        workflow = workflowManager.getWorkflow('qa-val-fail');
+        attempts++;
+      }
+
+      workflow = workflowManager.getWorkflow('qa-val-fail')!;
+      expect(workflow.status).toBe('Failed: QA Task Validation Error');
+      await workflowManager.killWorkflow('qa-val-fail');
+    });
+
+    it('should fail with Max QA Cycles Exceeded if loops exceed limit', async () => {
+      await resetBoard('- [ ] Task 1');
+      mockRuntime.nextResult = { exitCode: 0, logs: 'Done' };
+
+      await workflowManager.startWorkflow('qa-max-limit', testDir);
+      
+      const executor = (workflowManager as any).workflows.get('qa-max-limit');
+      executor.qaCycles = 3;
+
+      const originalRun = mockRuntime.run.bind(mockRuntime);
+      mockRuntime.run = async (prompt, dir, configDir) => {
+        const handle = await originalRun(prompt, dir, configDir);
+        const originalWait = handle.wait.bind(handle);
+        handle.wait = async () => {
+          if (prompt.includes('Open tasks.md and identify')) {
+            await inMemoryStorage.write('- [x] Task 1');
+            fs.writeFileSync(path.join(dir, 'tasks.md'), '- [x] Task 1');
+          }
+          return await originalWait();
+        };
+        return handle;
+      };
+
+      let workflow = workflowManager.getWorkflow('qa-max-limit');
+      let attempts = 0;
+      while (workflow && !workflow.status.startsWith('Failed') && attempts < 100) {
+        await jest.advanceTimersByTimeAsync(5000);
+        await flushPromises();
+        workflow = workflowManager.getWorkflow('qa-max-limit');
+        attempts++;
+      }
+
+      workflow = workflowManager.getWorkflow('qa-max-limit')!;
+      expect(workflow.status).toBe('Failed: Max QA Cycles Exceeded');
+      await workflowManager.killWorkflow('qa-max-limit');
+    });
+  });
 });

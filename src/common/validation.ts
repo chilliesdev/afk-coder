@@ -57,4 +57,17 @@ export class TaskValidator {
     
     return { tasks, pendingTasks };
   }
+
+  validateQATasks(content: string, previousTasks: Task[]): void {
+    const currentTasks = this.parseTasks(content);
+    const newTasks = currentTasks.filter(curr => 
+      !previousTasks.some(prev => prev.description === curr.description)
+    );
+
+    for (const task of newTasks) {
+      if (!/\[PRD:\s*.+\]$/.test(task.description)) {
+        throw new Error(`QA-added task "${task.description}" is missing a valid PRD reference suffix (e.g. "[PRD: Section 1.2]").`);
+      }
+    }
+  }
 }

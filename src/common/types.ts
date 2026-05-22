@@ -61,6 +61,8 @@ export interface Workflow {
   isWorktree?: boolean;
   sourceRepo?: string;
   branch?: string;
+  phase?: 'Coding' | 'QA';
+  qaCycles?: number;
 }
 
 export interface DaemonResponse<T = any> {

@@ -60,4 +60,24 @@ describe('Validation', () => {
       expect(() => validator.validateTasks(content)).not.toThrow();
     });
   });
+
+  describe('validateQATasks', () => {
+    it('should not throw if there are no new tasks', () => {
+      const prev = [{ completed: true, description: 'Task 1' }];
+      const content = '- [x] Task 1';
+      expect(() => validator.validateQATasks(content, prev)).not.toThrow();
+    });
+
+    it('should throw if a new task is missing PRD tag', () => {
+      const prev = [{ completed: true, description: 'Task 1' }];
+      const content = '- [x] Task 1\n- [ ] Task 2';
+      expect(() => validator.validateQATasks(content, prev)).toThrow('missing a valid PRD reference suffix');
+    });
+
+    it('should not throw if new tasks have valid PRD tags', () => {
+      const prev = [{ completed: true, description: 'Task 1' }];
+      const content = '- [x] Task 1\n- [ ] Task 2 [PRD: Section 4]';
+      expect(() => validator.validateQATasks(content, prev)).not.toThrow();
+    });
+  });
 });

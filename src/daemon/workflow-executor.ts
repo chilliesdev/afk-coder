@@ -1,7 +1,10 @@
 import { Workflow, Task, TokenUsage, TaskBoard as ITaskBoard } from '../common/types';
 import * as winston from 'winston';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Agent } from './agent';
 import { OutcomeAnalyzer } from './agent-outcome';
+import { TaskValidator } from '../common/validation';
 
 export class WorkflowExecutor {
   public readonly name: string;
@@ -17,6 +20,8 @@ export class WorkflowExecutor {
   public isWorktree?: boolean;
   public sourceRepo?: string;
   public branch?: string;
+  public phase: 'Coding' | 'QA' = 'Coding';
+  public qaCycles: number = 0;
 
   private stopHandle?: () => Promise<void>;
   private agent: Agent;
@@ -71,9 +76,106 @@ export class WorkflowExecutor {
       this.progress = `${progress.completed}/${progress.total}`;
 
       if (pendingTasks.length === 0) {
-        this.logger.info('All tasks completed');
-        this.status = 'Done';
-        break;
+        if (this.phase === 'Coding') {
+          if (this.qaCycles >= 3) {
+            this.logger.warn('Max QA cycles (3) exceeded without passing QA tests');
+            this.status = 'Failed: Max QA Cycles Exceeded';
+            break;
+          }
+          this.logger.info(`Coding tasks completed. Transitioning to QA Phase (Cycle ${this.qaCycles + 1})`);
+          this.phase = 'QA';
+          this.status = 'Running: QA Phase';
+
+          const previousTasks = boardState.tasks;
+          let retries = 0;
+          let success = false;
+
+          while (!success && (this.status === 'Running' || this.status.startsWith('Running'))) {
+            try {
+              const run = await this.agent.runQALoop(this.dir, this.configDir);
+              this.pid = run.pid;
+              this.stopHandle = run.stop;
+              this.logger.info('Running QA agent loop', { prompt: run.prompt });
+
+              const result = await run.wait();
+              this.pid = undefined;
+              this.stopHandle = undefined;
+
+              if (this.status === 'Done' || this.status === 'Killed' || !this.status.startsWith('Running')) {
+                break;
+              }
+
+              if (result.exitCode === 0) {
+                const tasksPath = path.join(this.dir, 'tasks.md');
+                if (fs.existsSync(tasksPath)) {
+                  const tasksContent = fs.readFileSync(tasksPath, 'utf-8');
+                  const validator = new TaskValidator();
+                  try {
+                    validator.validateQATasks(tasksContent, previousTasks);
+                  } catch (validationErr: any) {
+                    this.logger.error('QA task validation failed', { error: validationErr.message });
+                    this.status = `Failed: QA Task Validation Error`;
+                    break;
+                  }
+                }
+
+                const updatedBoardState = await this.taskBoard.load();
+                const newPending = updatedBoardState.pendingTasks;
+                if (newPending.length > 0) {
+                  this.qaCycles++;
+                  this.phase = 'Coding';
+                  this.status = 'Running: Autonomous Agent Loop';
+                  this.currentTask = undefined;
+                  this.logger.info('QA Phase found unmet requirements. Transitioning back to Coding Phase.', {
+                    newTasks: newPending.map(t => t.description)
+                  });
+                  success = true;
+                } else {
+                  this.logger.info('QA Phase passed with no unmet requirements.');
+                  this.status = 'Done';
+                  success = true;
+                }
+              } else {
+                const decision = this.analyzer.analyze(
+                  result.logs,
+                  result.exitCode,
+                  retries,
+                  0
+                );
+                this.tokenUsage.input += decision.tokens.input;
+                this.tokenUsage.output += decision.tokens.output;
+                this.tokenUsage.total += decision.tokens.total;
+
+                if (decision.action === 'retry') {
+                  retries++;
+                  this.logger.warn('QA Agent loop failed, retrying...', {
+                    exitCode: result.exitCode,
+                    attempt: retries,
+                    nextRetryIn: `${decision.delayMs / 1000}s`
+                  });
+                  await this.delay(decision.delayMs);
+                  continue;
+                }
+
+                this.logger.error('QA Agent loop failed after max retries', {
+                  exitCode: result.exitCode,
+                  output: result.logs
+                });
+                this.status = 'Failed';
+                break;
+              }
+            } catch (error: any) {
+              this.logger.error('QA Agent runtime error', { error: error.message });
+              this.status = 'Failed';
+              break;
+            }
+          }
+          continue;
+        } else {
+          this.logger.info('All tasks completed and QA passed');
+          this.status = 'Done';
+          break;
+        }
       }
 
       this.status = `Running: Autonomous Agent Loop`;
@@ -258,6 +360,8 @@ export class WorkflowExecutor {
       isWorktree: this.isWorktree,
       sourceRepo: this.sourceRepo,
       branch: this.branch,
+      phase: this.phase,
+      qaCycles: this.qaCycles,
     };
   }
 }

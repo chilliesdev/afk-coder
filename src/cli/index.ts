@@ -304,7 +304,11 @@ program
         const m = Math.floor((s % 3600) / 60);
         const rs = s % 60;
         return {
-          ...w,
+          name: w.name,
+          status: w.status,
+          progress: w.progress,
+          phase: w.phase || 'Coding',
+          'QA Cycles': w.qaCycles !== undefined ? `${w.qaCycles}/3` : '0/3',
           uptime: `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`,
         };
       });
@@ -353,6 +357,8 @@ program
       console.log(`${colors.bold}Uptime:${colors.reset}    ${uptimeStr}`);
       console.log(`${colors.bold}Directory:${colors.reset} ${w.dir}`);
       console.log(`${colors.bold}Progress:${colors.reset}  ${w.progress}`);
+      console.log(`${colors.bold}Phase:${colors.reset}     ${w.phase || 'Coding'}`);
+      console.log(`${colors.bold}QA Cycle:${colors.reset}  ${w.qaCycles !== undefined ? w.qaCycles : 0}/3`);
       console.log('');
       console.log(`${colors.bold}Current Task:${colors.reset}`);
       console.log(`  ${w.currentTask || 'None'}`);

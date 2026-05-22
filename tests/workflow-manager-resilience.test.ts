@@ -56,11 +56,13 @@ describe('WorkflowManager Resilience', () => {
       const handle = await originalRun(prompt, dir, configDir);
       const originalWait = handle.wait.bind(handle);
       handle.wait = async () => {
-        // Add another task so the loop continues
-        const tasks = [];
-        for (let i = 0; i <= idx; i++) tasks.push(`- [x] Task ${i+1}`);
-        if (idx < logs.length - 1) tasks.push(`- [ ] Task ${idx+2}`);
-        fs.writeFileSync(path.join(testDir, 'tasks.md'), tasks.join('\n'));
+        // Only update tasks during Coding phase (first logs.length runs)
+        if (idx < logs.length) {
+          const tasks = [];
+          for (let i = 0; i <= idx; i++) tasks.push(`- [x] Task ${i+1}`);
+          if (idx < logs.length - 1) tasks.push(`- [ ] Task ${idx+2}`);
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), tasks.join('\n'));
+        }
         
         return { exitCode: 0, logs: logs[idx] };
       };
@@ -139,7 +141,7 @@ describe('WorkflowManager Resilience', () => {
         await flushPromises();
         attempts++;
     }
-    expect(callCount).toBe(2);
+    expect(callCount).toBe(3);
 
     attempts = 0;
     let workflow = workflowManager.getWorkflow('test-429');

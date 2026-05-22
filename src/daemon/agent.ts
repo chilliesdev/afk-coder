@@ -14,6 +14,14 @@ export class Agent {
   }
 
   /**
+   * Runs the QA loop in the specified workspace directory.
+   */
+  async runQALoop(dir: string, configDir?: string): Promise<RuntimeHandle> {
+    const prompt = this.getQALoopPrompt();
+    return this.runtime.run(prompt, dir, configDir);
+  }
+
+  /**
    * Generates tasks.md from a PRD file using the execution runtime.
    */
   async generateTasks(
@@ -95,5 +103,12 @@ export class Agent {
    */
   private getTaskGenerationPrompt(prdFilename: string): string {
     return String.raw`gemini --yolo --prompt "Read the ${prdFilename} file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \"- [ ] Task description\". Do not output the tasks to the console; you must write them directly to the tasks.md file."`;
+  }
+
+  /**
+   * Returns the prompt for the QA loop.
+   */
+  private getQALoopPrompt(): string {
+    return `gemini --yolo --prompt "Read the PRD.md file and examine the codebase. Start the application if necessary to test it, and interact with it through external channels (e.g. HTTP, curl) as an end user would. Verify that all requirements in PRD.md are met. If you find any failures, bugs, or missing requirements, append them as new, uncompleted tasks to the end of tasks.md. Every new task must be formatted exactly as '- [ ] Task description [PRD: section or requirement name]'. Do NOT add any tasks that go beyond the scope of PRD.md. If all tests pass and there are no gaps, do not modify tasks.md. Exit when finished."`;
   }
 }
