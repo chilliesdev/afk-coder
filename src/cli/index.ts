@@ -239,7 +239,7 @@ program
   .command('start <workflow_name>')
   .description('Start a new workflow')
   .option('--dir <path>', 'Implementation directory')
-  .option('--worktree', 'Create a git worktree for this workflow')
+  .option('-w, --worktree', 'Create a git worktree for this workflow')
   .option('--branch <name>', 'Branch name to use for the worktree')
   .action(async (workflowName, options) => {
     try {
