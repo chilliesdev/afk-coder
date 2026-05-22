@@ -120,12 +120,17 @@ Kick off the autonomous coding loop. If `--dir` is not specified, it will run in
 ```bash
 afk-coder start my-feature --dir /path/to/project
 ```
+To run the workflow in an isolated git worktree, use the `--worktree` flag:
+```bash
+afk-coder start my-feature --worktree --branch my-feature-branch
+```
 
 ### 4. Monitor Progress
 Check the status of running workflows or view live logs:
 
 ```bash
 afk-coder list
+afk-coder status my-feature
 afk-coder logs my-feature -f
 ```
 
@@ -135,10 +140,11 @@ afk-coder logs my-feature -f
 
 | Command | Description |
 | :--- | :--- |
-| `init [--dir <path>] [--force]` | Extracts tasks from `PRD.md` into `tasks.md` using a Docker sandbox. Use `--force` to overwrite existing `tasks.md`. |
+| `init [--dir <path>] [--prd <file>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
-| `start <name> [--dir <path>]` | Hands over task execution to the background daemon. |
+| `start <name> [--dir <path>] [--worktree] [--branch <name>]` | Hands over task execution to the daemon. Supports running in a git worktree via `--worktree`. |
 | `list` | Lists all active and completed workflows. |
+| `status <name>` | Shows detailed status, phase, and QA cycles of a workflow. |
 | `logs <name> [--tail \| -f]` | Streams or outputs workflow execution logs. |
 | `kill <name>` | Terminates a running workflow. |
 | `remove <name>` | Cleans up a finished or failed workflow from the daemon. |
