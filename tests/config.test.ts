@@ -45,14 +45,22 @@ describe('Config Management', () => {
       const config = manager.loadConfig();
       expect(config.sandbox.image).toContain('gemini-cli/sandbox');
       expect(config.daemon?.socketGroup).toBe('afk-coder-users');
+      expect(config.daemon?.agent).toBe('gemini');
     });
 
     it('should return merged config if config file exists', () => {
       (fs.existsSync as jest.Mock).mockImplementation((p) => p === CONFIG_PATH);
-      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockConfig));
+      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({
+        ...mockConfig,
+        daemon: {
+          ...mockConfig.daemon,
+          agent: 'aider'
+        }
+      }));
       const config = manager.loadConfig();
       expect(config.sandbox.image).toBe('test-image');
       expect(config.daemon?.socketGroup).toBe('custom-group');
+      expect(config.daemon?.agent).toBe('aider');
       expect(config.auth?.clientId).toBe('test-client-id');
     });
 

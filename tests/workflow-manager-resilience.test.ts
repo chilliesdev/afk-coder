@@ -16,7 +16,7 @@ describe('WorkflowManager Resilience', () => {
     fs.mkdirSync(baseTestDir);
 
     mockRuntime = new MockRuntime();
-    workflowManager = new WorkflowManager(new Agent(mockRuntime));
+    workflowManager = new WorkflowManager(() => new Agent(mockRuntime));
   });
 
   afterEach(() => {

@@ -37,7 +37,7 @@ describe('WorkflowManager', () => {
     mockTaskBoard = new TaskBoard(inMemoryStorage);
     
     workflowManager = new WorkflowManager(
-      new Agent(mockRuntime),
+      () => new Agent(mockRuntime),
       () => mockTaskBoard
     );
 
@@ -465,6 +465,28 @@ describe('WorkflowManager', () => {
       workflow = workflowManager.getWorkflow('qa-max-limit')!;
       expect(workflow.status).toBe('Failed: Max QA Cycles Exceeded');
       await workflowManager.killWorkflow('qa-max-limit');
+    });
+  });
+
+  describe('Agent Factory', () => {
+    it('should pass the agent name to the factory', async () => {
+      const factory = jest.fn().mockImplementation(() => new Agent(mockRuntime));
+      workflowManager = new WorkflowManager(factory, () => mockTaskBoard);
+
+      await workflowManager.startWorkflow('agent-test', testDir, { agent: 'aider' });
+
+      expect(factory).toHaveBeenCalledWith('aider');
+      await workflowManager.killWorkflow('agent-test');
+    });
+
+    it('should pass undefined to the factory if no agent is specified', async () => {
+      const factory = jest.fn().mockImplementation(() => new Agent(mockRuntime));
+      workflowManager = new WorkflowManager(factory, () => mockTaskBoard);
+
+      await workflowManager.startWorkflow('agent-test-none', testDir);
+
+      expect(factory).toHaveBeenCalledWith(undefined);
+      await workflowManager.killWorkflow('agent-test-none');
     });
   });
 });

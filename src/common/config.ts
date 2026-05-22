@@ -16,6 +16,7 @@ export interface Config {
   daemon?: {
     socketGroup?: string;
     socketPath?: string;
+    agent?: string;
   };
   auth?: {
     clientId: string;
@@ -34,6 +35,7 @@ const DEFAULT_CONFIG: Config = {
   daemon: {
     socketGroup: 'afk-coder-users',
     socketPath: '/tmp/afk-coder.sock',
+    agent: 'gemini',
   },
   auth: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',

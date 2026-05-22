@@ -18,7 +18,7 @@ describe('WorkflowManager Integration', () => {
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     
     mockRuntime = new MockRuntime();
-    workflowManager = new WorkflowManager(new Agent(mockRuntime));
+    workflowManager = new WorkflowManager(() => new Agent(mockRuntime));
   });
 
   afterEach(() => {

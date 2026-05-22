@@ -274,6 +274,7 @@ program
   .option('--dir <path>', 'Implementation directory')
   .option('-w, --worktree', 'Create a git worktree for this workflow')
   .option('--branch <name>', 'Branch name to use for the worktree')
+  .option('--agent <name>', 'Agent adapter to use (e.g., gemini, aider)')
   .action(async (workflowName, options) => {
     try {
       const dir = path.resolve(options.dir || '.');
@@ -308,7 +309,8 @@ program
         configDir: CONFIG_DIR,
         isWorktree: options.worktree,
         sourceRepo,
-        branch
+        branch,
+        agent: options.agent
       });
       if (!response.success) {
         console.error(`Failed to start workflow: ${response.message}`);

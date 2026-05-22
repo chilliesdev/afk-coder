@@ -10,19 +10,21 @@ import { OutcomeAnalyzer } from './agent-outcome';
 import { Agent } from './agent';
 import { WorkflowExecutor } from './workflow-executor';
 
+export type AgentFactory = (agentName?: string) => Agent;
+
 export class WorkflowManager {
   private workflows: Map<string, WorkflowExecutor> = new Map();
   private loggers: Map<string, winston.Logger> = new Map();
-  private agent: Agent;
+  private agentFactory: AgentFactory;
   private taskBoardFactory: (path: string) => ITaskBoard;
   private evaluator: OutcomeAnalyzer;
 
   constructor(
-    agent: Agent, 
+    agentFactory: AgentFactory, 
     taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p), new TaskValidator()),
     evaluator: OutcomeAnalyzer = new OutcomeAnalyzer()
   ) {
-    this.agent = agent;
+    this.agentFactory = agentFactory;
     this.taskBoardFactory = taskBoardFactory;
     this.evaluator = evaluator;
   }
@@ -48,7 +50,7 @@ export class WorkflowManager {
     return logger;
   }
 
-  async startWorkflow(name: string, dir: string, options: { configDir?: string, isWorktree?: boolean, sourceRepo?: string, branch?: string } = {}): Promise<Workflow> {
+  async startWorkflow(name: string, dir: string, options: { configDir?: string, isWorktree?: boolean, sourceRepo?: string, branch?: string, agent?: string } = {}): Promise<Workflow> {
     const existing = this.workflows.get(name);
     if (existing && existing.status !== 'Done' && !existing.status.startsWith('Failed') && existing.status !== 'Killed') {
       throw new Error(`Workflow ${name} is already running`);
@@ -89,10 +91,11 @@ export class WorkflowManager {
     }
 
     const logger = this.getOrCreateLogger(name, dir);
+    const agent = this.agentFactory(options.agent);
     const executor = new WorkflowExecutor(
       name,
       dir,
-      this.agent,
+      agent,
       taskBoard,
       logger,
       options.configDir,

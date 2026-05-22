@@ -1,22 +1,36 @@
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as child_process from 'node:child_process';
-import { WorkflowManager } from './workflow-manager';
-import { DaemonResponse } from '../common/types';
+import { WorkflowManager, AgentFactory } from './workflow-manager';
+import { DaemonResponse, StartWorkflowRequestArgs } from '../common/types';
 import { ConfigManager } from '../common/config';
 import { DockerRuntime } from './runtime-docker';
 import { Agent } from './agent';
 import { TaskValidator } from '../common/validation';
 import { TaskBoard } from './task-board';
 import { FileSystemTaskStorage } from './task-storage';
+import { OutcomeAnalyzer } from './agent-outcome';
+import { GeminiAdapter } from './agent-gemini';
+import { AiderAdapter } from './agent-aider';
 
 const configManager = new ConfigManager();
 const config = configManager.loadConfig();
 const runtime = new DockerRuntime(configManager);
-const agent = new Agent(runtime);
 const validator = new TaskValidator();
+
+const agentFactory: AgentFactory = (agentName?: string) => {
+  const name = agentName || config.daemon?.agent || 'gemini';
+  let adapter;
+  if (name === 'aider') {
+    adapter = new AiderAdapter();
+  } else {
+    adapter = new GeminiAdapter();
+  }
+  return new Agent(runtime, new OutcomeAnalyzer(), adapter);
+};
+
 const workflowManager = new WorkflowManager(
-  agent,
+  agentFactory,
   (p) => new TaskBoard(new FileSystemTaskStorage(p), validator)
 );
 
@@ -62,16 +76,19 @@ const server = net.createServer((socket) => {
 
       switch (request.command) {
         case 'init': {
+          const agent = agentFactory(request.args.agent);
           const initResult = await agent.generateTasks(request.args.dir, request.args.prd, request.args.force, request.args.configDir);
           response = { success: initResult.success, message: initResult.error, data: initResult.logs };
           break;
         }
         case 'start': {
-          const workflow = await workflowManager.startWorkflow(request.args.name, request.args.dir, {
-            configDir: request.args.configDir,
-            isWorktree: request.args.isWorktree,
-            sourceRepo: request.args.sourceRepo,
-            branch: request.args.branch,
+          const startArgs = request.args as StartWorkflowRequestArgs;
+          const workflow = await workflowManager.startWorkflow(startArgs.name, startArgs.dir, {
+            configDir: startArgs.configDir,
+            isWorktree: startArgs.isWorktree,
+            sourceRepo: startArgs.sourceRepo,
+            branch: startArgs.branch,
+            agent: startArgs.agent,
           });
           response = { success: true, data: workflow };
           break;

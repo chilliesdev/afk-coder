@@ -19,7 +19,7 @@ describe('WorkflowManager Status Updates', () => {
 
     mockRuntime = new MockRuntime();
     mockRuntime.runDelay = 100;
-    workflowManager = new WorkflowManager(new Agent(mockRuntime));
+    workflowManager = new WorkflowManager(() => new Agent(mockRuntime));
   });
 
   afterEach(() => {

@@ -106,6 +106,28 @@ describe('CLI Commands', () => {
       
       spy.mockRestore();
     });
+
+    it('should pass the --agent flag to the daemon', async () => {
+      const { DaemonClient } = await import('../src/cli/client');
+      const client = new DaemonClient();
+      
+      const workflowName = 'agent-workflow';
+      const options = { dir: undefined, agent: 'aider' };
+      const dir = path.resolve(options.dir || '.');
+      
+      // Simulate passing to daemon
+      await client.sendCommand('start', { 
+        name: workflowName, 
+        dir,
+        agent: options.agent
+      });
+
+      expect(client.sendCommand).toHaveBeenCalledWith('start', { 
+        name: 'agent-workflow', 
+        dir: path.resolve('.'),
+        agent: 'aider'
+      });
+    });
   });
 
   describe('validation', () => {

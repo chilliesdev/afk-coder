@@ -5,6 +5,8 @@ import { TaskValidator } from '../common/validation';
 import { OutcomeAnalyzer } from './agent-outcome';
 import { Task, TokenUsage, TaskBoard as ITaskBoard } from '../common/types';
 import * as winston from 'winston';
+import { AgentAdapter } from './agent-adapter';
+import { GeminiAdapter } from './agent-gemini';
 
 export interface AgentPhaseResult {
   success: boolean;
@@ -20,7 +22,8 @@ export class Agent {
 
   constructor(
     private readonly runtime: ExecutionRuntime,
-    private readonly analyzer: OutcomeAnalyzer = new OutcomeAnalyzer()
+    private readonly analyzer: OutcomeAnalyzer = new OutcomeAnalyzer(),
+    private readonly adapter: AgentAdapter = new GeminiAdapter()
   ) {}
 
   async kill() {
@@ -51,7 +54,7 @@ export class Agent {
 
     while (!this.isKilled) {
       try {
-        const prompt = this.getAutonomousLoopPrompt();
+        const prompt = this.adapter.getAutonomousLoopCommand();
         this.currentRun = await this.runtime.run(prompt, dir, configDir);
         
         if (logger) {
@@ -115,7 +118,10 @@ export class Agent {
             logger.error('Agent loop failed after max retries', { exitCode: result.exitCode, output: result.logs, error: decision.error?.message });
           }
         }
-        return { success: false, tokenUsage, error: decision.error?.type === 'Safety' ? 'Safety Block' : decision.error?.type === 'NoProgress' ? 'No Progress' : decision.error?.message || 'Agent loop failed' };
+        const errorMessage = decision.error?.type === 'Safety' 
+          ? 'Safety Block' 
+          : (decision.error?.type === 'NoProgress' ? 'No Progress' : decision.error?.message || 'Agent loop failed');
+        return { success: false, tokenUsage, error: errorMessage };
       } catch (error: any) {
         const decision = this.analyzer.analyze(error.message || '', -1, retries, 0);
         if (decision.action === 'retry') {
@@ -139,7 +145,7 @@ export class Agent {
 
     while (!this.isKilled) {
       try {
-        const prompt = this.getQALoopPrompt();
+        const prompt = this.adapter.getQALoopCommand();
         this.currentRun = await this.runtime.run(prompt, dir, configDir);
         
         if (logger) {
@@ -157,24 +163,24 @@ export class Agent {
           tokenUsage.output += parsed.tokens.output;
           tokenUsage.total += parsed.tokens.total;
           return { success: true, tokenUsage };
-        } else {
-          const decision = this.analyzer.analyze(result.logs || '', result.exitCode, retries, 0);
-          tokenUsage.input += decision.tokens.input;
-          tokenUsage.output += decision.tokens.output;
-          tokenUsage.total += decision.tokens.total;
-
-          if (decision.action === 'retry') {
-            retries++;
-            if (logger) {
-              logger.warn('QA Agent loop failed, retrying...', { exitCode: result.exitCode, attempt: retries, nextRetryIn: `${decision.delayMs / 1000}s` });
-            }
-            await this.delay(decision.delayMs);
-            continue;
-          }
-
-          if (logger) logger.error('QA Agent loop failed after max retries', { exitCode: result.exitCode, output: result.logs });
-          return { success: false, tokenUsage, error: decision.error?.message || 'QA Agent loop failed' };
         }
+        
+        const decision = this.analyzer.analyze(result.logs || '', result.exitCode, retries, 0);
+        tokenUsage.input += decision.tokens.input;
+        tokenUsage.output += decision.tokens.output;
+        tokenUsage.total += decision.tokens.total;
+
+        if (decision.action === 'retry') {
+          retries++;
+          if (logger) {
+            logger.warn('QA Agent loop failed, retrying...', { exitCode: result.exitCode, attempt: retries, nextRetryIn: `${decision.delayMs / 1000}s` });
+          }
+          await this.delay(decision.delayMs);
+          continue;
+        }
+
+        if (logger) logger.error('QA Agent loop failed after max retries', { exitCode: result.exitCode, output: result.logs });
+        return { success: false, tokenUsage, error: decision.error?.message || 'QA Agent loop failed' };
       } catch (error: any) {
         const decision = this.analyzer.analyze(error.message || '', -1, retries, 0);
         if (decision.action === 'retry') {
@@ -215,7 +221,7 @@ export class Agent {
     }
 
     try {
-      const prompt = this.getTaskGenerationPrompt(prdFilename);
+      const prompt = this.adapter.getTaskGenerationCommand(prdFilename);
       const run = await this.runtime.run(prompt, resolvedDir, configDir);
       const result = await run.wait();
 
@@ -255,24 +261,13 @@ export class Agent {
 
   // To support old tests assuming runAutonomousLoop and runQALoop are just wrappers:
   async runAutonomousLoop(dir: string, configDir?: string): Promise<RuntimeHandle> {
-    const prompt = this.getAutonomousLoopPrompt();
+    const prompt = this.adapter.getAutonomousLoopCommand();
     return this.runtime.run(prompt, dir, configDir);
   }
 
   async runQALoop(dir: string, configDir?: string): Promise<RuntimeHandle> {
-    const prompt = this.getQALoopPrompt();
+    const prompt = this.adapter.getQALoopCommand();
     return this.runtime.run(prompt, dir, configDir);
   }
-
-  private getAutonomousLoopPrompt(): string {
-    return `gemini --yolo --prompt "Open tasks.md and identify the highest priority uncompleted task (marked with '- [ ]'). Your objective is to implement the necessary code for this task. Explore the codebase, write the code, and thoroughly verify your changes. Once completed and verified, open tasks.md again and mark ONLY that specific task as done by changing '- [ ]' to '- [x]'. Do not work on multiple tasks at once. Exit the session when finished."`;
-  }
-
-  private getTaskGenerationPrompt(prdFilename: string): string {
-    return String.raw`gemini --yolo --prompt "Read the ${prdFilename} file. Break down the requirements into granular, actionable implementation tasks. Create a new file named tasks.md and write the tasks into it. Format each task exactly as \"- [ ] Task description\". Do not output the tasks to the console; you must write them directly to the tasks.md file."`;
-  }
-
-  private getQALoopPrompt(): string {
-    return `gemini --yolo --prompt "Read the PRD.md file and examine the codebase. Start the application if necessary to test it, and interact with it through external channels (e.g. HTTP, curl) as an end user would. Verify that all requirements in PRD.md are met. If you find any failures, bugs, or missing requirements, append them as new, uncompleted tasks to the end of tasks.md. Every new task must be formatted exactly as '- [ ] Task description [PRD: section or requirement name]'. Do NOT add any tasks that go beyond the scope of PRD.md. If all tests pass and there are no gaps, do not modify tasks.md. Exit when finished."`;
-  }
 }
+

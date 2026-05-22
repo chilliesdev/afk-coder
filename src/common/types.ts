@@ -70,3 +70,13 @@ export interface DaemonResponse<T = any> {
   message?: string;
   data?: T;
 }
+
+export interface StartWorkflowRequestArgs {
+  name: string;
+  dir: string;
+  configDir?: string;
+  isWorktree?: boolean;
+  sourceRepo?: string;
+  branch?: string;
+  agent?: string;
+}
