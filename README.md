@@ -33,8 +33,7 @@ The system consists of three main components:
 ### Prerequisites
 - **OS:** Ubuntu (or Debian-based distribution)
 - **Node.js:** v18+ 
-- **Docker:** Installed and running
-- **Gemini CLI:** Installed globally (`npm install -g @google/gemini-cli`)
+- **Docker:** Installed and running (the Gemini CLI runs inside the sandbox container, so no host-side Gemini CLI installation is required)
 
 ### Setup
 Run the provided installation script:
@@ -76,11 +75,17 @@ sudo systemctl start afk-coder
 You can configure `afk-coder` using environment variables or a configuration file.
 
 ### Environment Variables
-For secure credentials management, you can provide your Google Cloud OAuth credentials via environment variables. Create a `.env` file by copying the example:
+For secure credentials management, you can provide your Google Cloud OAuth credentials or API key via environment variables. Create a `.env` file by copying the example:
 ```bash
 cp .env.example .env
 ```
 Fill in your `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the `.env` file. These values take precedence over the configuration file.
+
+Alternatively, you can authenticate using a Gemini API Key. Export the `GEMINI_API_KEY` on your host environment or inside `.env`:
+```bash
+export GEMINI_API_KEY="your-api-key-here"
+```
+The daemon will automatically detect and forward this key to the sandboxed runtime, bypassing OAuth setup.
 
 ### Configuration File
 You can customize the daemon and sandbox behavior by editing `~/.config/afk-coder/config.json`.
@@ -89,7 +94,7 @@ You can customize the daemon and sandbox behavior by editing `~/.config/afk-code
 | :--- | :--- | :--- |
 | `daemon.socketGroup` | `"afk-coder-users"` | The Unix group that will own the control socket. |
 | `daemon.socketPath` | `"/tmp/afk-coder.sock"` | The path to the daemon's control socket. |
-| `sandbox.image` | (latest stable) | The Docker image used for the execution sandbox. |
+| `sandbox.image` | `"us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0"` | The Docker image used for the execution sandbox. |
 | `sandbox.memory` | `2147483648` | Memory limit for the sandbox (bytes). |
 | `sandbox.nanoCpus` | `2000000000` | CPU limit for the sandbox (nano CPUs). |
 | `auth.redirectUri` | `"http://localhost:3000"` | The redirect URI for the OAuth 2.0 flow. |
@@ -102,7 +107,11 @@ You can customize the daemon and sandbox behavior by editing `~/.config/afk-code
 Create a `PRD.md` in your project directory, then generate a `tasks.md`:
 
 ```bash
-afk-coder init --dir /path/to/project [--force]
+# Runs in the current directory, looking for PRD.md
+afk-coder init
+
+# Or specify a custom directory and overwrite existing tasks.md
+afk-coder init --dir /path/to/project --prd custom-PRD.md --force
 ```
 **Note:** The `init` command requires authentication. Please run `afk-coder login` first or set the `GEMINI_API_KEY` environment variable.
 
@@ -113,6 +122,13 @@ Log in to your Google account to enable Gemini Pro access. Ensure your OAuth cre
 afk-coder login
 ```
 
+**Remote/Headless Servers:**
+If you are running the CLI on a remote server without a web browser, the local callback server on port 3000 won't be able to open a browser window automatically. To complete login:
+1. Open the generated authorization URL on your local machine's web browser.
+2. Complete the OAuth flow.
+3. The browser will redirect to `http://localhost:3000/` (which may fail to load locally). Copy the full redirect URL containing `?code=...` from the browser's address bar.
+4. Paste the URL directly into the CLI prompt: `If running on a remote server, paste the redirect URL here:` and press Enter.
+
 **Troubleshooting:** If you encounter an `EADDRINUSE` error (port 3000 is occupied), free the port by running `npx kill-port 3000` and try logging in again.
 
 ### 3. Start a Workflow
@@ -120,9 +136,9 @@ Kick off the autonomous coding loop. If `--dir` is not specified, it will run in
 ```bash
 afk-coder start my-feature --dir /path/to/project
 ```
-To run the workflow in an isolated git worktree, use the `--worktree` flag:
+To run the workflow in an isolated git worktree, use the `-w` or `--worktree` flag:
 ```bash
-afk-coder start my-feature --worktree --branch my-feature-branch
+afk-coder start my-feature -w --branch my-feature-branch
 ```
 
 ### 4. Monitor Progress
@@ -140,12 +156,12 @@ afk-coder logs my-feature -f
 
 | Command | Description |
 | :--- | :--- |
-| `init [--dir <path>] [--prd <file>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. Use `--force` to overwrite existing `tasks.md`. |
+| `init [--dir <path>] [--prd <filename>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. `--dir` defaults to `.`, and `--prd` defaults to `PRD.md`. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
-| `start <name> [--dir <path>] [--worktree] [--branch <name>]` | Hands over task execution to the daemon. Supports running in a git worktree via `--worktree`. |
+| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>]` | Hands over task execution to the daemon. Supports running in a git worktree via `-w` or `--worktree`. |
 | `list` | Lists all active and completed workflows. |
 | `status <name>` | Shows detailed status, phase, and QA cycles of a workflow. |
-| `logs <name> [--tail \| -f]` | Streams or outputs workflow execution logs. |
+| `logs <name> [-f\|--follow] [--tail <lines>]` | Streams or outputs workflow execution logs. Use `-f` or `--follow` to stream logs. |
 | `kill <name>` | Terminates a running workflow. |
 | `remove <name>` | Cleans up a finished or failed workflow from the daemon. |
 
