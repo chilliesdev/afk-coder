@@ -87,6 +87,10 @@ export GEMINI_API_KEY="your-api-key-here"
 ```
 The daemon will automatically detect and forward this key to the sandboxed runtime, bypassing OAuth setup.
 
+#### Additional Environment Variables
+*   `AFK_CODER_SOCKET`: Override the default Unix socket path (`/tmp/afk-coder.sock`) used to communicate between the CLI and Daemon.
+*   `GEMINI_CLI_AUTH_METHOD` & `GEMINI_PROJECT_ID`: If set on the host, these variables are forwarded to the sandboxed runtime container to customize the Gemini CLI configuration.
+
 ### Configuration File
 You can customize the daemon and sandbox behavior by editing `~/.config/afk-coder/config.json`.
 
@@ -94,6 +98,7 @@ You can customize the daemon and sandbox behavior by editing `~/.config/afk-code
 | :--- | :--- | :--- |
 | `daemon.socketGroup` | `"afk-coder-users"` | The Unix group that will own the control socket. |
 | `daemon.socketPath` | `"/tmp/afk-coder.sock"` | The path to the daemon's control socket. |
+| `daemon.agent` | `"gemini"` | The default agent adapter to use for tasks (e.g., `"gemini"`, `"aider"`). |
 | `sandbox.image` | `"us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0"` | The Docker image used for the execution sandbox. |
 | `sandbox.memory` | `2147483648` | Memory limit for the sandbox (bytes). |
 | `sandbox.nanoCpus` | `2000000000` | CPU limit for the sandbox (nano CPUs). |
@@ -140,6 +145,10 @@ To run the workflow in an isolated git worktree, use the `-w` or `--worktree` fl
 ```bash
 afk-coder start my-feature -w --branch my-feature-branch
 ```
+To specify a different agent adapter (e.g., `aider`), use the `--agent` option:
+```bash
+afk-coder start my-feature --agent aider
+```
 
 ### 4. Monitor Progress
 Check the status of running workflows or view live logs:
@@ -158,12 +167,17 @@ afk-coder logs my-feature -f
 | :--- | :--- |
 | `init [--dir <path>] [--prd <filename>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. `--dir` defaults to `.`, and `--prd` defaults to `PRD.md`. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
-| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>]` | Hands over task execution to the daemon. Supports running in a git worktree via `-w` or `--worktree`. |
+| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Supports running in a git worktree via `-w` or `--worktree`, and specifying the agent adapter via `--agent` (e.g. `gemini` or `aider`). |
 | `list` | Lists all active and completed workflows. |
 | `status <name>` | Shows detailed status, phase, and QA cycles of a workflow. |
 | `logs <name> [-f\|--follow] [--tail <lines>]` | Streams or outputs workflow execution logs. Use `-f` or `--follow` to stream logs. |
 | `kill <name>` | Terminates a running workflow. |
 | `remove <name>` | Cleans up a finished or failed workflow from the daemon. |
+
+### Daemon CLI Options (`afk-coder-daemon`)
+When running the daemon binary directly (e.g., for development or debugging):
+*   `--socket <path>`: Override the default socket path.
+*   `--help`: Display help and options.
 
 ---
 
@@ -172,6 +186,16 @@ afk-coder logs my-feature -f
 - **Isolation:** All LLM-generated commands are executed inside a Docker container.
 - **Privilege:** The daemon runs as a restricted `afk-coder` user, while the *internal* sandbox has root access for setup.
 - **Auth:** Google OAuth 2.0 with PKCE ensures secure access to your AI subscription.
+
+---
+
+## 🚦 QA Phase & Cycle Rules
+
+When the Coding Phase completes (all tasks in `tasks.md` are marked `[x]`), the workflow enters the **QA Phase**.
+
+1.  **QA Cycle Definition:** A single QA Cycle consists of the transition `Coding Phase -> QA Phase -> Coding Phase` (if unmet requirements are found).
+2.  **Max Cycles Limit:** A workflow is capped at a maximum of **3 QA cycles**. If requirements remain unmet after 3 cycles, the workflow will terminate with the status `Failed: Max QA Cycles Exceeded`.
+3.  **QA Task Format Requirement:** Any new tasks added to `tasks.md` during the QA Phase must contain a PRD reference suffix matching `[PRD: <requirement>]` (e.g., `- [ ] Fix server response [PRD: Section 2.1]`). Tasks failing to match this format will cause a validation failure.
 
 ---
 
