@@ -585,6 +585,20 @@ configCmd
       process.exit(1);
     }
 
+    if (key === 'auth.scopes') {
+      if (!Array.isArray(coercedValue)) {
+        if (coercedValue === null || coercedValue === undefined) {
+          coercedValue = [];
+        } else if (typeof coercedValue === 'string') {
+          coercedValue = coercedValue.split(',').map((s: string) => s.trim()).filter(Boolean);
+        } else {
+          coercedValue = [String(coercedValue)];
+        }
+      } else {
+        coercedValue = coercedValue.map(String);
+      }
+    }
+
     current[lastPart] = coercedValue;
 
     configManager.saveConfig(config);
@@ -596,7 +610,7 @@ configCmd
   .description('Open the configuration file in your default editor')
   .action(async () => {
     const { ConfigManager, CONFIG_PATH } = await import('../common/config');
-    const { spawn } = await import('node:child_process');
+    const { spawnSync } = await import('node:child_process');
     const configManager = new ConfigManager();
     
     // Ensure config exists
@@ -604,21 +618,19 @@ configCmd
       configManager.saveConfig(configManager.loadConfig());
     }
 
-    const editor = process.env.VISUAL || process.env.EDITOR || (process.platform === 'win32' ? 'notepad' : 'vi');
+    const editor = process.env.VISUAL || process.env.EDITOR || (process.platform === 'win32' ? 'notepad' : 'nano');
     console.log(`Opening configuration in ${editor}...`);
 
-    const child = spawn(editor, [CONFIG_PATH], {
+    const result = spawnSync(editor, [CONFIG_PATH], {
       stdio: 'inherit',
       shell: true
     });
 
-    child.on('exit', (code) => {
-      if (code === 0) {
-        console.log('Configuration updated.');
-      } else {
-        console.error(`Editor exited with code ${code}`);
-      }
-    });
+    if (result.status === 0) {
+      console.log('Configuration updated.');
+    } else {
+      console.error(`Editor exited with code ${result.status}`);
+    }
   });
 
 program.parse();

@@ -6,17 +6,12 @@ import * as os from 'node:os';
 describe('Config CLI', () => {
   const TEST_CONFIG_DIR = path.join(os.tmpdir(), 'afk-coder-test-config-' + Math.random().toString(36).substring(7));
   const BIN_PATH = path.resolve(__dirname, '../src/cli/index.ts');
+  const TS_NODE_BIN = path.resolve(__dirname, '../node_modules/.bin/ts-node');
   
   beforeAll(() => {
     if (!fs.existsSync(TEST_CONFIG_DIR)) {
       fs.mkdirSync(TEST_CONFIG_DIR, { recursive: true });
     }
-    // We need to tell the CLI to use our test config dir.
-    // Looking at src/cli/index.ts, it imports CONFIG_DIR from ../common/config.
-    // It doesn't seem to have an easy way to override it via env var unless we modify the code.
-    // Wait, src/common/config.ts uses path.join(os.homedir(), '.config', 'afk-coder');
-    // We can mock os.homedir() if we were using Jest mocks, but here we are running as a separate process.
-    // Alternatively, we can set HOME env var for the child process.
   });
 
   afterAll(() => {
@@ -28,8 +23,9 @@ describe('Config CLI', () => {
   const runCli = (args: string, env: any = {}) => {
     try {
       // Set HOME to our temp dir so it uses a fresh config
-      return execSync(`npx ts-node ${BIN_PATH} ${args}`, {
+      return execSync(`${TS_NODE_BIN} ${BIN_PATH} ${args}`, {
         encoding: 'utf-8',
+        timeout: 5000,
         env: { ...process.env, HOME: TEST_CONFIG_DIR, ...env }
       });
     } catch (error: any) {
@@ -94,5 +90,19 @@ describe('Config CLI', () => {
     const output = runCli('config edit', { VISUAL: 'true' });
     expect(output).toContain('Opening configuration in true...');
     expect(fs.existsSync(path.join(TEST_CONFIG_DIR, '.config/afk-coder/config.json'))).toBe(true);
+  });
+
+  test('config set coerces auth.scopes to array even if a single string is passed', () => {
+    runCli('config set auth.scopes single-scope');
+    const output = runCli('config get auth.scopes');
+    const scopes = JSON.parse(output);
+    expect(scopes).toEqual(['single-scope']);
+  });
+
+  test('config edit falls back to nano on non-Windows when VISUAL and EDITOR are unset', () => {
+    if (process.platform !== 'win32') {
+      const output = runCli('config edit', { VISUAL: '', EDITOR: '' });
+      expect(output).toContain('Opening configuration in nano...');
+    }
   });
 });
