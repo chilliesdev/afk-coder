@@ -221,7 +221,7 @@ describe('WorkflowManager', () => {
       
       // Simulate branch exists and worktree creation
       (execSync as jest.Mock).mockImplementation((cmd: string) => {
-        if (cmd.startsWith('git worktree add')) {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
           fs.mkdirSync(testDir, { recursive: true });
           fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
           fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
@@ -236,11 +236,11 @@ describe('WorkflowManager', () => {
       });
 
       expect(execSync).toHaveBeenCalledWith(
-        'git show-branch workflow/wt-test1',
+        'git -c safe.directory=* show-ref --verify --quiet refs/heads/workflow/wt-test1',
         expect.objectContaining({ cwd: '/mock/repo' })
       );
       expect(execSync).toHaveBeenCalledWith(
-        `git worktree add "${testDir}" workflow/wt-test1`,
+        `git -c safe.directory=* worktree add "${testDir}" workflow/wt-test1`,
         expect.objectContaining({ cwd: '/mock/repo' })
       );
 
@@ -258,10 +258,10 @@ describe('WorkflowManager', () => {
       
       // Simulate branch does not exist, then create worktree
       (execSync as jest.Mock).mockImplementation((cmd: string) => {
-        if (cmd.startsWith('git show-branch')) {
+        if (cmd.includes('git -c safe.directory=* show-ref')) {
           throw new Error('Branch not found');
         }
-        if (cmd.startsWith('git worktree add')) {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
           fs.mkdirSync(testDir, { recursive: true });
           fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
           fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
@@ -276,11 +276,11 @@ describe('WorkflowManager', () => {
       });
 
       expect(execSync).toHaveBeenCalledWith(
-        'git show-branch workflow/wt-test2',
+        'git -c safe.directory=* show-ref --verify --quiet refs/heads/workflow/wt-test2',
         expect.objectContaining({ cwd: '/mock/repo' })
       );
       expect(execSync).toHaveBeenCalledWith(
-        `git worktree add -b workflow/wt-test2 "${testDir}"`,
+        `git -c safe.directory=* worktree add -b workflow/wt-test2 "${testDir}"`,
         expect.objectContaining({ cwd: '/mock/repo' })
       );
       
@@ -308,9 +308,109 @@ describe('WorkflowManager', () => {
       workflowManager.removeWorkflow('wt-test3');
 
       expect(execSync).toHaveBeenCalledWith(
-        `git worktree remove --force "${testDir}"`,
+        `git -c safe.directory=* worktree remove --force "${testDir}"`,
         expect.objectContaining({ cwd: '/mock/repo' })
       );
+    });
+
+    it('should copy PRD.md and tasks.md from sourceRepo if they exist and are missing in worktree', async () => {
+      const srcRepo = path.resolve('./test-src-repo');
+      if (fs.existsSync(srcRepo)) {
+        fs.rmSync(srcRepo, { recursive: true, force: true });
+      }
+      fs.mkdirSync(srcRepo);
+      fs.writeFileSync(path.join(srcRepo, 'PRD.md'), '# Source PRD');
+      fs.writeFileSync(path.join(srcRepo, 'tasks.md'), '- [ ] Task 1');
+
+      fs.rmSync(testDir, { recursive: true, force: true });
+
+      // Mock implementation to just create empty directory on worktree add
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+        }
+        return Buffer.from('');
+      });
+
+      await workflowManager.startWorkflow('wt-test-copy', testDir, {
+        isWorktree: true,
+        sourceRepo: srcRepo,
+        branch: 'workflow/wt-test-copy'
+      });
+
+      // Verify they were copied
+      expect(fs.existsSync(path.join(testDir, 'PRD.md'))).toBe(true);
+      expect(fs.existsSync(path.join(testDir, 'tasks.md'))).toBe(true);
+      expect(fs.readFileSync(path.join(testDir, 'PRD.md'), 'utf8')).toBe('# Source PRD');
+
+      // Cleanup
+      fs.rmSync(srcRepo, { recursive: true, force: true });
+      await workflowManager.killWorkflow('wt-test-copy');
+    });
+
+    it('should stage and commit changes to the worktree branch when a task is completed', async () => {
+      await resetBoard('- [ ] Task 1');
+      fs.rmSync(testDir, { recursive: true, force: true });
+
+      // Simulate worktree setup and write initial files
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+          fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
+        }
+        // Return dummy changes for git status
+        if (cmd.includes('git -c safe.directory=* status --porcelain')) {
+          return Buffer.from('M modified-file.ts\n');
+        }
+        return Buffer.from('');
+      });
+
+      mockRuntime.nextResult = {
+        exitCode: 0,
+        logs: 'Success! Tokens: 10 in, 20 out'
+      };
+
+      const originalReconcile = mockTaskBoard.reconcile.bind(mockTaskBoard);
+      mockTaskBoard.reconcile = async () => {
+        await inMemoryStorage.write('- [x] Task 1');
+        fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [x] Task 1');
+        return await originalReconcile();
+      };
+
+      await workflowManager.startWorkflow('wt-test-commit', testDir, {
+        isWorktree: true,
+        sourceRepo: '/mock/repo',
+        branch: 'workflow/wt-test-commit'
+      });
+
+      const flushPromises = () => new Promise(resolve => jest.requireActual('timers').setImmediate(resolve));
+
+      // Wait for it to finish
+      let attempts = 0;
+      let workflow = workflowManager.getWorkflow('wt-test-commit');
+      while (workflow && workflow.status !== 'Done' && attempts < 100) {
+        await jest.advanceTimersByTimeAsync(5000);
+        await flushPromises();
+        workflow = workflowManager.getWorkflow('wt-test-commit');
+        attempts++;
+      }
+
+      // Assert that git add, status, and commit were called
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* add .',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* status --porcelain',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* commit -m "feat: Task 1"',
+        expect.objectContaining({ cwd: testDir })
+      );
+
+      await workflowManager.killWorkflow('wt-test-commit');
     });
   });
 

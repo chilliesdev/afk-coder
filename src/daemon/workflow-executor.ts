@@ -2,6 +2,7 @@ import { Workflow, Task, TokenUsage, TaskBoard as ITaskBoard } from '../common/t
 import * as winston from 'winston';
 import { Agent } from './agent';
 import { CodingPhaseAdapter, QaPhaseAdapter, WorkflowPhase, WorkflowPhaseContext } from './workflow-phase';
+import { execSync } from 'node:child_process';
 
 export class WorkflowExecutor {
   public readonly name: string;
@@ -88,6 +89,19 @@ export class WorkflowExecutor {
         reportCompletedTasks: async (tasks: Task[]) => {
           for (const t of tasks) {
             this.recentTasks.unshift(t.description);
+            if (this.isWorktree && this.sourceRepo && this.branch) {
+              try {
+                execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+                const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+                const statusStr = (status || '').toString();
+                if (statusStr.trim().length > 0) {
+                  execSync(`git -c safe.directory=* commit -m "feat: ${t.description}"`, { cwd: this.dir });
+                  this.logger.info(`Committed changes for task: ${t.description}`);
+                }
+              } catch (commitErr: any) {
+                this.logger.warn(`Failed to commit changes for task "${t.description}": ${commitErr.message}`);
+              }
+            }
           }
           if (this.recentTasks.length > 5) {
             this.recentTasks.length = 5;
@@ -110,9 +124,35 @@ export class WorkflowExecutor {
 
         if (nextPhase === 'Done') {
           this.status = 'Done';
+          if (this.isWorktree && this.sourceRepo && this.branch) {
+            try {
+              execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+              const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+              const statusStr = (status || '').toString();
+              if (statusStr.trim().length > 0) {
+                execSync(`git -c safe.directory=* commit -m "chore: workflow completed successfully"`, { cwd: this.dir });
+                this.logger.info('Committed final changes at workflow completion');
+              }
+            } catch (commitErr: any) {
+              this.logger.warn(`Failed to make final commit: ${commitErr.message}`);
+            }
+          }
           break;
         } else if (nextPhase.startsWith('Failed')) {
           this.status = nextPhase;
+          if (this.isWorktree && this.sourceRepo && this.branch) {
+            try {
+              execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+              const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+              const statusStr = (status || '').toString();
+              if (statusStr.trim().length > 0) {
+                execSync(`git -c safe.directory=* commit -m "chore: workflow failed - ${nextPhase}"`, { cwd: this.dir });
+                this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
+              }
+            } catch (commitErr: any) {
+              this.logger.warn(`Failed to make failure commit: ${commitErr.message}`);
+            }
+          }
           break;
         } else if (nextPhase === 'QA' && this.phase !== 'QA') {
           this.phase = 'QA';
@@ -125,6 +165,16 @@ export class WorkflowExecutor {
         if (this.status !== 'Killed') {
           this.logger.error('Workflow loop failed with exception', { error: error.message });
           this.status = 'Failed';
+          if (this.isWorktree && this.sourceRepo && this.branch) {
+            try {
+              execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+              const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+              const statusStr = (status || '').toString();
+              if (statusStr.trim().length > 0) {
+                execSync(`git -c safe.directory=* commit -m "chore: workflow failed with exception"`, { cwd: this.dir });
+              }
+            } catch {}
+          }
         }
         break;
       }

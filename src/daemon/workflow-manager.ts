@@ -58,17 +58,35 @@ export class WorkflowManager {
 
     if (!fs.existsSync(dir)) {
       if (options.isWorktree && options.sourceRepo && options.branch) {
+        // Prune dead worktrees first to avoid directory/reference conflicts
+        try {
+          execSync('git -c safe.directory=* worktree prune', { cwd: options.sourceRepo });
+        } catch {}
         // Create the worktree branch. If it exists, checkout, else create it.
         try {
-          execSync(`git show-branch ${options.branch}`, { stdio: 'ignore', cwd: options.sourceRepo });
+          execSync(`git -c safe.directory=* show-ref --verify --quiet refs/heads/${options.branch}`, { stdio: 'ignore', cwd: options.sourceRepo });
           // Branch exists, create worktree from it
-          execSync(`git worktree add "${dir}" ${options.branch}`, { cwd: options.sourceRepo });
+          execSync(`git -c safe.directory=* worktree add "${dir}" ${options.branch}`, { cwd: options.sourceRepo });
         } catch {
           // Branch doesn't exist, create it via worktree add -b
-          execSync(`git worktree add -b ${options.branch} "${dir}"`, { cwd: options.sourceRepo });
+          execSync(`git -c safe.directory=* worktree add -b ${options.branch} "${dir}"`, { cwd: options.sourceRepo });
         }
       } else {
         fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+
+    if (options.isWorktree && options.sourceRepo) {
+      const srcPrd = path.join(options.sourceRepo, 'PRD.md');
+      const srcTasks = path.join(options.sourceRepo, 'tasks.md');
+      const destPrd = path.join(dir, 'PRD.md');
+      const destTasks = path.join(dir, 'tasks.md');
+
+      if (fs.existsSync(srcPrd) && !fs.existsSync(destPrd)) {
+        fs.copyFileSync(srcPrd, destPrd);
+      }
+      if (fs.existsSync(srcTasks) && !fs.existsSync(destTasks)) {
+        fs.copyFileSync(srcTasks, destTasks);
       }
     }
 
@@ -143,7 +161,7 @@ export class WorkflowManager {
 
     if (executor.isWorktree && executor.sourceRepo) {
       try {
-        execSync(`git worktree remove --force "${executor.dir}"`, { cwd: executor.sourceRepo });
+        execSync(`git -c safe.directory=* worktree remove --force "${executor.dir}"`, { cwd: executor.sourceRepo });
       } catch (err: any) {
         console.error(`Failed to remove worktree: ${err.message}`);
       }

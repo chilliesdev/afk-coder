@@ -141,9 +141,14 @@ Kick off the autonomous coding loop. If `--dir` is not specified, it will run in
 ```bash
 afk-coder start my-feature --dir /path/to/project
 ```
-To run the workflow in an isolated git worktree, use the `-w` or `--worktree` flag:
+To run the workflow in an isolated git worktree, use the `-w` or `--worktree` flag. If `--dir` and `--branch` are not provided, they will be automatically generated with a random suffix based on the workflow name to avoid conflicts:
 ```bash
-afk-coder start my-feature -w --branch my-feature-branch
+afk-coder start my-feature -w
+# This creates a worktree directory like ./my-feature-5a1b3c and a branch named my-feature-5a1b3c
+```
+You can also explicitly specify the branch and directory if desired:
+```bash
+afk-coder start my-feature -w --branch my-feature-branch --dir /path/to/worktree
 ```
 To specify a different agent adapter (e.g., `aider`), use the `--agent` option:
 ```bash
@@ -167,7 +172,7 @@ afk-coder logs my-feature -f
 | :--- | :--- |
 | `init [--dir <path>] [--prd <filename>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. `--dir` defaults to `.`, and `--prd` defaults to `PRD.md`. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
-| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Supports running in a git worktree via `-w` or `--worktree`, and specifying the agent adapter via `--agent` (e.g. `gemini` or `aider`). |
+| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Runs in a git worktree via `-w` or `--worktree`. If `--dir` or `--branch` are omitted when running in a worktree, they are automatically generated using the workflow name and a random suffix to prevent collisions. Specifying `--agent` selects the agent adapter (e.g. `gemini` or `aider`). |
 | `list` | Lists all active and completed workflows. |
 | `status <name>` | Shows detailed status, phase, and QA cycles of a workflow. |
 | `logs <name> [-f\|--follow] [--tail <lines>]` | Streams or outputs workflow execution logs. Use `-f` or `--follow` to stream logs. |

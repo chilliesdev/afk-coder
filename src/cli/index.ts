@@ -277,18 +277,7 @@ program
   .option('--agent <name>', 'Agent adapter to use (e.g., gemini, aider)')
   .action(async (workflowName, options) => {
     try {
-      const dir = path.resolve(options.dir || '.');
-
-      // Validate locally before sending to daemon
-      try {
-        if (!options.worktree) {
-          validateWorkflowDir(dir);
-        }
-      } catch (error: any) {
-        console.error(`Validation failed: ${error.message}`);
-        return;
-      }
-
+      let dir: string;
       let sourceRepo: string | undefined;
       let branch: string | undefined;
 
@@ -299,7 +288,24 @@ program
           console.error('Validation failed: --worktree must be run from inside a git repository');
           return;
         }
-        branch = options.branch || `workflow/${workflowName}`;
+
+        const { randomBytes } = await import('node:crypto');
+        const randomSuffix = randomBytes(3).toString('hex');
+
+        branch = options.branch || `${workflowName}-${randomSuffix}`;
+        dir = options.dir ? path.resolve(options.dir) : path.resolve(`${workflowName}-${randomSuffix}`);
+      } else {
+        dir = path.resolve(options.dir || '.');
+      }
+
+      // Validate locally before sending to daemon
+      try {
+        if (!options.worktree) {
+          validateWorkflowDir(dir);
+        }
+      } catch (error: any) {
+        console.error(`Validation failed: ${error.message}`);
+        return;
       }
 
       const { CONFIG_DIR } = await import('../common/config');
@@ -549,7 +555,7 @@ configCmd
     if (value.toLowerCase() === 'true') coercedValue = true;
     else if (value.toLowerCase() === 'false') coercedValue = false;
     else if (value.toLowerCase() === 'null') coercedValue = null;
-    else if (!isNaN(Number(value)) && value.trim() !== '') coercedValue = Number(value);
+    else if (!Number.isNaN(Number(value)) && value.trim() !== '') coercedValue = Number(value);
     else if (value.startsWith('[') && value.endsWith(']')) {
       try {
         coercedValue = JSON.parse(value);
@@ -571,14 +577,12 @@ configCmd
       current = current[part];
     }
 
-    const lastPart = parts[parts.length - 1];
+    const lastPart = parts.at(-1)!;
     
     // Validation for specific keys
-    if (key === 'sandbox.memory' || key === 'sandbox.nanoCpus') {
-      if (typeof coercedValue !== 'number' || isNaN(coercedValue)) {
-        console.error(`Error: ${key} must be a number.`);
-        process.exit(1);
-      }
+    if ((key === 'sandbox.memory' || key === 'sandbox.nanoCpus') && (typeof coercedValue !== 'number' || Number.isNaN(coercedValue))) {
+      console.error(`Error: ${key} must be a number.`);
+      process.exit(1);
     }
 
     current[lastPart] = coercedValue;
