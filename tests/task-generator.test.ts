@@ -47,6 +47,8 @@ describe('Agent Task Generation', () => {
     expect(res.success).toBe(true);
     expect(res.logs).toContain('Successfully generated tasks.md');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] Generated Task 1');
+    expect(mockRuntime.startCalled).toBe(true);
+    expect(mockRuntime.stopCalled).toBe(true);
   });
 
   it('should fall back to parsing stdout if file was left empty', async () => {
@@ -60,6 +62,8 @@ describe('Agent Task Generation', () => {
     expect(res.success).toBe(true);
     expect(res.logs).toContain('from stdout');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] Task from stdout 1\n- [ ] Task from stdout 2');
+    expect(mockRuntime.startCalled).toBe(true);
+    expect(mockRuntime.stopCalled).toBe(true);
   });
 
   it('should fail and clean up tasks.md if exit code is non-zero and file is empty', async () => {
@@ -73,12 +77,16 @@ describe('Agent Task Generation', () => {
     expect(res.success).toBe(false);
     expect(res.error).toContain('Exit code 1');
     expect(fs.existsSync(path.join(TEST_DIR, 'tasks.md'))).toBe(false);
+    expect(mockRuntime.startCalled).toBe(true);
+    expect(mockRuntime.stopCalled).toBe(true);
   });
 
   it('should fail if PRD.md does not exist', async () => {
     const res = await agent.generateTasks(TEST_DIR, 'PRD.md');
     expect(res.success).toBe(false);
     expect(res.error).toContain('PRD.md not found');
+    expect(mockRuntime.startCalled).toBe(false);
+    expect(mockRuntime.stopCalled).toBe(false);
   });
 
   it('should fail if tasks.md already exists and force is false', async () => {
@@ -89,6 +97,8 @@ describe('Agent Task Generation', () => {
     expect(res.success).toBe(false);
     expect(res.error).toContain('already exists');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [x] Existing Task');
+    expect(mockRuntime.startCalled).toBe(false);
+    expect(mockRuntime.stopCalled).toBe(false);
   });
 
   it('should overwrite existing tasks.md if force is true', async () => {
@@ -103,5 +113,7 @@ describe('Agent Task Generation', () => {
     const res = await agent.generateTasks(TEST_DIR, 'PRD.md', true);
     expect(res.success).toBe(true);
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] New Task');
+    expect(mockRuntime.startCalled).toBe(true);
+    expect(mockRuntime.stopCalled).toBe(true);
   });
 });

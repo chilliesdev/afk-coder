@@ -586,7 +586,9 @@ configCmd
     }
 
     if (key === 'auth.scopes') {
-      if (!Array.isArray(coercedValue)) {
+      if (Array.isArray(coercedValue)) {
+        coercedValue = coercedValue.map(String);
+      } else {
         if (coercedValue === null || coercedValue === undefined) {
           coercedValue = [];
         } else if (typeof coercedValue === 'string') {
@@ -594,8 +596,6 @@ configCmd
         } else {
           coercedValue = [String(coercedValue)];
         }
-      } else {
-        coercedValue = coercedValue.map(String);
       }
     }
 

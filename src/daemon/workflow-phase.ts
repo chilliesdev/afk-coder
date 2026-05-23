@@ -72,8 +72,8 @@ export class QaPhaseAdapter implements WorkflowPhase {
       const validator = new TaskValidator();
       try {
         validator.validateQATasks(tasksContent, previousTasks);
-      } catch (validationErr: any) {
-        context.logger.error('QA task validation failed', { error: validationErr.message });
+      } catch (error: any) {
+        context.logger.error('QA task validation failed', { error: error.message });
         return `Failed: QA Task Validation Error`;
       }
     }

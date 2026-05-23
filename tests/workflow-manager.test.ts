@@ -44,10 +44,21 @@ describe('WorkflowManager', () => {
     jest.useFakeTimers();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.useRealTimers();
+    if (workflowManager) {
+      const workflows = workflowManager.listWorkflows();
+      for (const wf of workflows) {
+        try {
+          await workflowManager.killWorkflow(wf.name);
+        } catch {}
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 0));
     if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      } catch {}
     }
   });
 

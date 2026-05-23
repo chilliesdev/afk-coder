@@ -8,6 +8,9 @@ import { ConfigManager, TOKENS_PATH } from '../common/config';
 export class DockerRuntime implements ExecutionRuntime {
   private docker: Docker;
   private readonly configManager: ConfigManager;
+  private container?: Docker.Container;
+  private containerPid?: number;
+  private tempDir?: string;
 
   constructor(configManager: ConfigManager = new ConfigManager()) {
     this.docker = new Docker();
@@ -15,13 +18,9 @@ export class DockerRuntime implements ExecutionRuntime {
   }
 
   /**
-   * Runs an arbitrary prompt inside a Docker container using the Gemini CLI.
-   * @param prompt The full command or prompt to execute.
-   * @param dir The directory to map to /app inside the container.
-   * @param configDir Optional directory for configuration files.
-   * @returns A handle to the running process.
+   * Starts a persistent Docker container for the workflow.
    */
-  async run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle> {
+  async start(dir: string, configDir?: string): Promise<void> {
     const configManager = configDir ? new ConfigManager(configDir) : this.configManager;
     await configManager.refreshToken();
     const tokens = configManager.loadTokens();
@@ -60,6 +59,7 @@ export class DockerRuntime implements ExecutionRuntime {
       
       // Mount the settings directory into the container's root home
       binds.push(`${geminiSettingsDir}:/root/.gemini`);
+      this.tempDir = tempDir;
     } else if (process.env.GEMINI_API_KEY) {
       env.push(`GEMINI_API_KEY=${process.env.GEMINI_API_KEY}`);
     }
@@ -82,7 +82,7 @@ export class DockerRuntime implements ExecutionRuntime {
 
     const container = await this.docker.createContainer({
       Image: image,
-      Cmd: ['bash', '-c', prompt],
+      Cmd: ['tail', '-f', '/dev/null'],
       Env: env,
       HostConfig: {
         Binds: binds,
@@ -100,55 +100,105 @@ export class DockerRuntime implements ExecutionRuntime {
     const inspect = await container.inspect();
     const pid = inspect.State.Pid;
 
-    const cleanup = async () => {
-      if (tempDir) {
-        try {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-    };
+    this.container = container;
+    this.containerPid = pid;
+  }
 
-    return {
-      pid,
-      prompt,
-      stop: async () => {
-        try {
-          await container.kill();
-        } catch {
-          // Container might already be stopped
-        }
-        try {
-          await container.remove();
-        } catch {
-          // Container might already be removed
-        }
-        await cleanup();
-      },
-      wait: async (): Promise<RuntimeResult> => {
-        const result = await container.wait();
-        // Get logs and demux them (strip the 8-byte Docker headers)
-        const logBuffer = await container.logs({ stdout: true, stderr: true });
-        let logs = '';
-        let offset = 0;
-        while (offset < logBuffer.length) {
-          const size = logBuffer.readUInt32BE(offset + 4);
-          logs += logBuffer.toString('utf8', offset + 8, offset + 8 + size);
-          offset += 8 + size;
-        }
-        try {
-          await container.remove();
-        } catch {
-          // Container might already be removed by stop()
-        }
-        await cleanup();
-        return {
-          exitCode: result.StatusCode,
-          logs: logs,
-        };
+  /**
+   * Stops the persistent container and cleans up temporary credentials.
+   */
+  async stop(): Promise<void> {
+    const container = this.container;
+    const tempDir = this.tempDir;
+
+    this.container = undefined;
+    this.containerPid = undefined;
+    this.tempDir = undefined;
+
+    if (container) {
+      try {
+        await container.kill();
+      } catch {
+        // Container might already be stopped
       }
-    };
+      try {
+        await container.remove();
+      } catch {
+        // Container might already be removed
+      }
+    }
+
+    if (tempDir) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+
+  /**
+   * Runs an arbitrary prompt inside a Docker container using the Gemini CLI.
+   * If start() has been called, executes the command in the persistent container.
+   * Otherwise, creates a temporary container for backwards compatibility.
+   */
+  async run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle> {
+    if (this.container) {
+      const container = this.container;
+      const exec = await container.exec({
+        Cmd: ['bash', '-c', prompt],
+        AttachStdout: true,
+        AttachStderr: true
+      });
+
+      const stream = await exec.start({ Detach: false });
+
+      const readStream = (): Promise<Buffer> => {
+        return new Promise((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+          stream.on('end', () => resolve(Buffer.concat(chunks)));
+          stream.on('error', (err) => reject(err));
+        });
+      };
+
+      let waitPromise: Promise<RuntimeResult> | undefined;
+      const getWait = () => {
+        if (!waitPromise) {
+          waitPromise = (async () => {
+            const logBuffer = await readStream();
+            const inspect = await exec.inspect();
+            const exitCode = inspect.ExitCode ?? 0;
+
+            let logs = '';
+            let offset = 0;
+            while (offset < logBuffer.length) {
+              if (offset + 8 > logBuffer.length) break;
+              const size = logBuffer.readUInt32BE(offset + 4);
+              if (offset + 8 + size > logBuffer.length) break;
+              logs += logBuffer.toString('utf8', offset + 8, offset + 8 + size);
+              offset += 8 + size;
+            }
+
+            return {
+              exitCode,
+              logs
+            };
+          })();
+        }
+        return waitPromise;
+      };
+
+      return {
+        pid: this.containerPid,
+        prompt,
+        stop: async () => {
+          await this.stop();
+        },
+        wait: getWait
+      };
+    }
+    throw new Error('Container not started. Call start() before run().');
   }
 
   /**

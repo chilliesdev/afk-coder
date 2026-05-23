@@ -11,5 +11,7 @@ export interface RuntimeHandle {
 }
 
 export interface ExecutionRuntime {
+  start?(dir: string, configDir?: string): Promise<void>;
+  stop?(): Promise<void>;
   run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle>;
 }

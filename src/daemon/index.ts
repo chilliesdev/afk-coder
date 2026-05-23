@@ -15,18 +15,13 @@ import { AiderAdapter } from './agent-aider';
 
 const configManager = new ConfigManager();
 const config = configManager.loadConfig();
-const runtime = new DockerRuntime(configManager);
 const validator = new TaskValidator();
 
 const agentFactory: AgentFactory = (agentName?: string) => {
   const name = agentName || config.daemon?.agent || 'gemini';
-  let adapter;
-  if (name === 'aider') {
-    adapter = new AiderAdapter();
-  } else {
-    adapter = new GeminiAdapter();
-  }
-  return new Agent(runtime, new OutcomeAnalyzer(), adapter);
+  const adapter = name === 'aider' ? new AiderAdapter() : new GeminiAdapter();
+  const agentRuntime = new DockerRuntime(configManager);
+  return new Agent(agentRuntime, new OutcomeAnalyzer(), adapter);
 };
 
 const workflowManager = new WorkflowManager(

@@ -26,6 +26,18 @@ export class Agent {
     private readonly adapter: AgentAdapter = new GeminiAdapter()
   ) {}
 
+  async start(dir: string, configDir?: string): Promise<void> {
+    if (this.runtime.start) {
+      await this.runtime.start(dir, configDir);
+    }
+  }
+
+  async stop(): Promise<void> {
+    if (this.runtime.stop) {
+      await this.runtime.stop();
+    }
+  }
+
   async kill() {
     this.isKilled = true;
     if (this.activeDelayTimeout) {
@@ -36,6 +48,7 @@ export class Agent {
       await this.currentRun.stop();
       this.currentRun = undefined;
     }
+    await this.stop();
   }
 
   private async delay(ms: number): Promise<void> {
@@ -221,6 +234,15 @@ export class Agent {
     }
 
     try {
+      await this.start(resolvedDir, configDir);
+    } catch (error: any) {
+      if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
+        fs.unlinkSync(tasksPath);
+      }
+      return { success: false, error: `Failed to start execution runtime: ${error.message}` };
+    }
+
+    try {
       const prompt = this.adapter.getTaskGenerationCommand(prdFilename);
       const run = await this.runtime.run(prompt, resolvedDir, configDir);
       const result = await run.wait();
@@ -256,6 +278,8 @@ export class Agent {
         fs.unlinkSync(tasksPath);
       }
       return { success: false, error: error.message };
+    } finally {
+      await this.stop();
     }
   }
 

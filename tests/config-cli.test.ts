@@ -25,8 +25,14 @@ describe('Config CLI', () => {
       // Set HOME to our temp dir so it uses a fresh config
       return execSync(`${TS_NODE_BIN} ${BIN_PATH} ${args}`, {
         encoding: 'utf-8',
-        timeout: 5000,
-        env: { ...process.env, HOME: TEST_CONFIG_DIR, ...env }
+        timeout: 20000,
+        env: { 
+          ...process.env, 
+          HOME: TEST_CONFIG_DIR, 
+          npm_config_update_notifier: 'false',
+          NO_UPDATE_NOTIFIER: '1',
+          ...env 
+        }
       });
     } catch (error: any) {
       return error.stdout + error.stderr;

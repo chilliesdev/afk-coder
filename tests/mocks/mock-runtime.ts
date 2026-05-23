@@ -5,8 +5,19 @@ export class MockRuntime implements ExecutionRuntime {
   public lastPrompt?: string;
   public lastDir?: string;
   public isRunning = false;
+  public startCalled = false;
+  public startedDir?: string;
   public stopCalled = false;
   public runDelay = 0;
+
+  async start(dir: string, configDir?: string): Promise<void> {
+    this.startCalled = true;
+    this.startedDir = dir;
+  }
+
+  async stop(): Promise<void> {
+    this.stopCalled = true;
+  }
 
   async run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle> {
     this.lastPrompt = prompt;

@@ -67,116 +67,129 @@ export class WorkflowExecutor {
   }
 
   private async runLoop() {
-    while (this.status !== 'Failed' && this.status !== 'Done' && this.status !== 'Killed' && !this.status.startsWith('Failed')) {
-      const boardState = await this.taskBoard.load();
-      this.progress = `${boardState.progress.completed}/${boardState.progress.total}`;
+    try {
+      await this.agent.start(this.dir, this.configDir);
+    } catch (error: any) {
+      this.logger.error('Failed to start execution runtime container', { error: error.message });
+      this.status = 'Failed: Runtime Startup Error';
+      return;
+    }
 
-      this.status = this.phase === 'Coding' ? 'Running: Autonomous Agent Loop' : 'Running: QA Phase';
-      this.currentTask = this.phase === 'Coding' ? 'Autonomous Task Selection' : undefined;
-      
-      const context: WorkflowPhaseContext = {
-        dir: this.dir,
-        configDir: this.configDir,
-        taskBoard: this.taskBoard,
-        agent: this.agent,
-        logger: this.logger,
-        qaCycles: this.qaCycles,
-        reportTokens: (input: number, output: number) => {
-          this.tokenUsage.input += input;
-          this.tokenUsage.output += output;
-          this.tokenUsage.total += (input + output);
-        },
-        reportCompletedTasks: async (tasks: Task[]) => {
-          for (const t of tasks) {
-            this.recentTasks.unshift(t.description);
+    try {
+      while (this.status !== 'Failed' && this.status !== 'Done' && this.status !== 'Killed' && !this.status.startsWith('Failed')) {
+        const boardState = await this.taskBoard.load();
+        this.progress = `${boardState.progress.completed}/${boardState.progress.total}`;
+
+        this.status = this.phase === 'Coding' ? 'Running: Autonomous Agent Loop' : 'Running: QA Phase';
+        this.currentTask = this.phase === 'Coding' ? 'Autonomous Task Selection' : undefined;
+        
+        const context: WorkflowPhaseContext = {
+          dir: this.dir,
+          configDir: this.configDir,
+          taskBoard: this.taskBoard,
+          agent: this.agent,
+          logger: this.logger,
+          qaCycles: this.qaCycles,
+          reportTokens: (input: number, output: number) => {
+            this.tokenUsage.input += input;
+            this.tokenUsage.output += output;
+            this.tokenUsage.total += (input + output);
+          },
+          reportCompletedTasks: async (tasks: Task[]) => {
+            for (const t of tasks) {
+              this.recentTasks.unshift(t.description);
+              if (this.isWorktree && this.sourceRepo && this.branch) {
+                try {
+                  execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+                  const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+                  const statusStr = (status || '').toString();
+                  if (statusStr.trim().length > 0) {
+                    execSync(`git -c safe.directory=* commit -m "feat: ${t.description}"`, { cwd: this.dir });
+                    this.logger.info(`Committed changes for task: ${t.description}`);
+                  }
+                } catch (error: any) {
+                  this.logger.warn(`Failed to commit changes for task "${t.description}": ${error.message}`);
+                }
+              }
+            }
+            if (this.recentTasks.length > 5) {
+              this.recentTasks.length = 5;
+            }
+            const updatedState = await this.taskBoard.load();
+            this.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
+            this.currentTask = undefined;
+          }
+        };
+
+        try {
+          const nextPhase = await (this.phase === 'Coding' ? this.codingPhase.execute(context) : this.qaPhase.execute(context));
+
+          if (this.status === 'Killed') break;
+
+          if (nextPhase === 'Done') {
+            this.status = 'Done';
             if (this.isWorktree && this.sourceRepo && this.branch) {
               try {
                 execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
                 const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
                 const statusStr = (status || '').toString();
                 if (statusStr.trim().length > 0) {
-                  execSync(`git -c safe.directory=* commit -m "feat: ${t.description}"`, { cwd: this.dir });
-                  this.logger.info(`Committed changes for task: ${t.description}`);
+                  execSync(`git -c safe.directory=* commit -m "chore: workflow completed successfully"`, { cwd: this.dir });
+                  this.logger.info('Committed final changes at workflow completion');
                 }
-              } catch (commitErr: any) {
-                this.logger.warn(`Failed to commit changes for task "${t.description}": ${commitErr.message}`);
+              } catch (error: any) {
+                this.logger.warn(`Failed to make final commit: ${error.message}`);
+              }
+            }
+            break;
+          } else if (nextPhase.startsWith('Failed')) {
+            this.status = nextPhase;
+            if (this.isWorktree && this.sourceRepo && this.branch) {
+              try {
+                execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+                const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+                const statusStr = (status || '').toString();
+                if (statusStr.trim().length > 0) {
+                  execSync(`git -c safe.directory=* commit -m "chore: workflow failed - ${nextPhase}"`, { cwd: this.dir });
+                  this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
+                }
+              } catch (error: any) {
+                this.logger.warn(`Failed to make failure commit: ${error.message}`);
+              }
+            }
+            break;
+          } else if (nextPhase === 'QA' && this.phase !== 'QA') {
+            this.phase = 'QA';
+          } else if (nextPhase === 'Coding' && this.phase !== 'Coding') {
+            this.phase = 'Coding';
+            this.qaCycles++;
+          }
+
+        } catch (error: any) {
+          if (this.status !== 'Killed') {
+            this.logger.error('Workflow loop failed with exception', { error: error.message });
+            this.status = 'Failed';
+            if (this.isWorktree && this.sourceRepo && this.branch) {
+              try {
+                execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
+                const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
+                const statusStr = (status || '').toString();
+                if (statusStr.trim().length > 0) {
+                  execSync(`git -c safe.directory=* commit -m "chore: workflow failed with exception"`, { cwd: this.dir });
+                }
+              } catch {
+                // Ignore git commit failure
               }
             }
           }
-          if (this.recentTasks.length > 5) {
-            this.recentTasks.length = 5;
-          }
-          const updatedState = await this.taskBoard.load();
-          this.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
-          this.currentTask = undefined;
+          break;
         }
-      };
-
+      }
+    } finally {
       try {
-        let nextPhase;
-        if (this.phase === 'Coding') {
-          nextPhase = await this.codingPhase.execute(context);
-        } else {
-          nextPhase = await this.qaPhase.execute(context);
-        }
-
-        if (this.status === 'Killed') break;
-
-        if (nextPhase === 'Done') {
-          this.status = 'Done';
-          if (this.isWorktree && this.sourceRepo && this.branch) {
-            try {
-              execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-              const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-              const statusStr = (status || '').toString();
-              if (statusStr.trim().length > 0) {
-                execSync(`git -c safe.directory=* commit -m "chore: workflow completed successfully"`, { cwd: this.dir });
-                this.logger.info('Committed final changes at workflow completion');
-              }
-            } catch (commitErr: any) {
-              this.logger.warn(`Failed to make final commit: ${commitErr.message}`);
-            }
-          }
-          break;
-        } else if (nextPhase.startsWith('Failed')) {
-          this.status = nextPhase;
-          if (this.isWorktree && this.sourceRepo && this.branch) {
-            try {
-              execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-              const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-              const statusStr = (status || '').toString();
-              if (statusStr.trim().length > 0) {
-                execSync(`git -c safe.directory=* commit -m "chore: workflow failed - ${nextPhase}"`, { cwd: this.dir });
-                this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
-              }
-            } catch (commitErr: any) {
-              this.logger.warn(`Failed to make failure commit: ${commitErr.message}`);
-            }
-          }
-          break;
-        } else if (nextPhase === 'QA' && this.phase !== 'QA') {
-          this.phase = 'QA';
-        } else if (nextPhase === 'Coding' && this.phase !== 'Coding') {
-          this.phase = 'Coding';
-          this.qaCycles++;
-        }
-
+        await this.agent.stop();
       } catch (error: any) {
-        if (this.status !== 'Killed') {
-          this.logger.error('Workflow loop failed with exception', { error: error.message });
-          this.status = 'Failed';
-          if (this.isWorktree && this.sourceRepo && this.branch) {
-            try {
-              execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-              const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-              const statusStr = (status || '').toString();
-              if (statusStr.trim().length > 0) {
-                execSync(`git -c safe.directory=* commit -m "chore: workflow failed with exception"`, { cwd: this.dir });
-              }
-            } catch {}
-          }
-        }
-        break;
+        this.logger.warn('Failed to stop execution runtime container', { error: error.message });
       }
     }
   }

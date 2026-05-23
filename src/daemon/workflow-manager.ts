@@ -61,7 +61,9 @@ export class WorkflowManager {
         // Prune dead worktrees first to avoid directory/reference conflicts
         try {
           execSync('git -c safe.directory=* worktree prune', { cwd: options.sourceRepo });
-        } catch {}
+        } catch {
+          // Ignore worktree prune errors
+        }
         // Create the worktree branch. If it exists, checkout, else create it.
         try {
           execSync(`git -c safe.directory=* show-ref --verify --quiet refs/heads/${options.branch}`, { stdio: 'ignore', cwd: options.sourceRepo });
@@ -162,8 +164,8 @@ export class WorkflowManager {
     if (executor.isWorktree && executor.sourceRepo) {
       try {
         execSync(`git -c safe.directory=* worktree remove --force "${executor.dir}"`, { cwd: executor.sourceRepo });
-      } catch (err: any) {
-        console.error(`Failed to remove worktree: ${err.message}`);
+      } catch (error: any) {
+        console.error(`Failed to remove worktree: ${error.message}`);
       }
     }
 
