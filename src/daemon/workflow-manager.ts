@@ -1,7 +1,8 @@
 import { Workflow, Task, TaskBoard as ITaskBoard } from '../common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
+import { GitClient, ShellGitClient } from '../common/git';
+
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
 import { FileSystemTaskStorage } from './task-storage';
@@ -11,6 +12,7 @@ import { Agent } from './agent';
 import { WorkflowExecutor } from './workflow-executor';
 
 export type AgentFactory = (agentName?: string) => Agent;
+export type GitClientFactory = (dir: string) => GitClient;
 
 export class WorkflowManager {
   private workflows: Map<string, WorkflowExecutor> = new Map();
@@ -18,15 +20,18 @@ export class WorkflowManager {
   private agentFactory: AgentFactory;
   private taskBoardFactory: (path: string) => ITaskBoard;
   private evaluator: OutcomeAnalyzer;
+  private gitClientFactory: GitClientFactory;
 
   constructor(
     agentFactory: AgentFactory, 
     taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p), new TaskValidator()),
-    evaluator: OutcomeAnalyzer = new OutcomeAnalyzer()
+    evaluator: OutcomeAnalyzer = new OutcomeAnalyzer(),
+    gitClientFactory: GitClientFactory = (dir) => new ShellGitClient(dir)
   ) {
     this.agentFactory = agentFactory;
     this.taskBoardFactory = taskBoardFactory;
     this.evaluator = evaluator;
+    this.gitClientFactory = gitClientFactory;
   }
 
   private getOrCreateLogger(name: string, dir: string): winston.Logger {
@@ -58,20 +63,25 @@ export class WorkflowManager {
 
     if (!fs.existsSync(dir)) {
       if (options.isWorktree && options.sourceRepo && options.branch) {
+        const sourceGit = this.gitClientFactory(options.sourceRepo);
         // Prune dead worktrees first to avoid directory/reference conflicts
         try {
-          execSync('git -c safe.directory=* worktree prune', { cwd: options.sourceRepo });
+          sourceGit.pruneWorktrees();
         } catch {
           // Ignore worktree prune errors
         }
         // Create the worktree branch. If it exists, checkout, else create it.
         try {
-          execSync(`git -c safe.directory=* show-ref --verify --quiet refs/heads/${options.branch}`, { stdio: 'ignore', cwd: options.sourceRepo });
-          // Branch exists, create worktree from it
-          execSync(`git -c safe.directory=* worktree add "${dir}" ${options.branch}`, { cwd: options.sourceRepo });
-        } catch {
-          // Branch doesn't exist, create it via worktree add -b
-          execSync(`git -c safe.directory=* worktree add -b ${options.branch} "${dir}"`, { cwd: options.sourceRepo });
+          if (sourceGit.hasBranch(options.branch)) {
+            // Branch exists, create worktree from it
+            sourceGit.addWorktree(dir, options.branch);
+          } else {
+            // Branch doesn't exist, create it via worktree add -b
+            sourceGit.createWorktree(dir, options.branch);
+          }
+        } catch (error: any) {
+          // Let worktree creation failure bubble up if it fails on both attempts
+          throw new Error(`Failed to create git worktree: ${error.message}`, { cause: error });
         }
       } else {
         fs.mkdirSync(dir, { recursive: true });
@@ -121,7 +131,8 @@ export class WorkflowManager {
       options.configDir,
       options.isWorktree,
       options.sourceRepo,
-      options.branch
+      options.branch,
+      this.gitClientFactory(dir)
     );
 
     this.workflows.set(name, executor);
@@ -163,7 +174,8 @@ export class WorkflowManager {
 
     if (executor.isWorktree && executor.sourceRepo) {
       try {
-        execSync(`git -c safe.directory=* worktree remove --force "${executor.dir}"`, { cwd: executor.sourceRepo });
+        const sourceGit = this.gitClientFactory(executor.sourceRepo);
+        sourceGit.removeWorktree(executor.dir);
       } catch (error: any) {
         console.error(`Failed to remove worktree: ${error.message}`);
       }

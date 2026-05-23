@@ -2,7 +2,8 @@ import { Workflow, Task, TokenUsage, TaskBoard as ITaskBoard } from '../common/t
 import * as winston from 'winston';
 import { Agent } from './agent';
 import { CodingPhaseAdapter, QaPhaseAdapter, WorkflowPhase, WorkflowPhaseContext } from './workflow-phase';
-import { execSync } from 'node:child_process';
+import { GitClient, ShellGitClient } from '../common/git';
+
 
 export class WorkflowExecutor {
   public readonly name: string;
@@ -27,6 +28,7 @@ export class WorkflowExecutor {
   
   private codingPhase: WorkflowPhase;
   private qaPhase: WorkflowPhase;
+  public readonly git: GitClient;
 
   constructor(
     name: string,
@@ -37,7 +39,8 @@ export class WorkflowExecutor {
     configDir?: string,
     isWorktree?: boolean,
     sourceRepo?: string,
-    branch?: string
+    branch?: string,
+    gitClient?: GitClient
   ) {
     this.name = name;
     this.dir = dir;
@@ -52,6 +55,7 @@ export class WorkflowExecutor {
     
     this.codingPhase = new CodingPhaseAdapter();
     this.qaPhase = new QaPhaseAdapter();
+    this.git = gitClient || new ShellGitClient(dir);
   }
 
   get uptime(): number {
@@ -100,11 +104,9 @@ export class WorkflowExecutor {
               this.recentTasks.unshift(t.description);
               if (this.isWorktree && this.sourceRepo && this.branch) {
                 try {
-                  execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-                  const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-                  const statusStr = (status || '').toString();
-                  if (statusStr.trim().length > 0) {
-                    execSync(`git -c safe.directory=* commit -m "feat: ${t.description}"`, { cwd: this.dir });
+                  this.git.add('.');
+                  if (this.git.hasChanges()) {
+                    this.git.commit(`feat: ${t.description}`);
                     this.logger.info(`Committed changes for task: ${t.description}`);
                   }
                 } catch (error: any) {
@@ -130,11 +132,9 @@ export class WorkflowExecutor {
             this.status = 'Done';
             if (this.isWorktree && this.sourceRepo && this.branch) {
               try {
-                execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-                const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-                const statusStr = (status || '').toString();
-                if (statusStr.trim().length > 0) {
-                  execSync(`git -c safe.directory=* commit -m "chore: workflow completed successfully"`, { cwd: this.dir });
+                this.git.add('.');
+                if (this.git.hasChanges()) {
+                  this.git.commit('chore: workflow completed successfully');
                   this.logger.info('Committed final changes at workflow completion');
                 }
               } catch (error: any) {
@@ -146,11 +146,9 @@ export class WorkflowExecutor {
             this.status = nextPhase;
             if (this.isWorktree && this.sourceRepo && this.branch) {
               try {
-                execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-                const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-                const statusStr = (status || '').toString();
-                if (statusStr.trim().length > 0) {
-                  execSync(`git -c safe.directory=* commit -m "chore: workflow failed - ${nextPhase}"`, { cwd: this.dir });
+                this.git.add('.');
+                if (this.git.hasChanges()) {
+                  this.git.commit(`chore: workflow failed - ${nextPhase}`);
                   this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
                 }
               } catch (error: any) {
@@ -171,11 +169,9 @@ export class WorkflowExecutor {
             this.status = 'Failed';
             if (this.isWorktree && this.sourceRepo && this.branch) {
               try {
-                execSync(`git -c safe.directory=* add .`, { cwd: this.dir });
-                const status = execSync(`git -c safe.directory=* status --porcelain`, { encoding: 'utf-8', cwd: this.dir });
-                const statusStr = (status || '').toString();
-                if (statusStr.trim().length > 0) {
-                  execSync(`git -c safe.directory=* commit -m "chore: workflow failed with exception"`, { cwd: this.dir });
+                this.git.add('.');
+                if (this.git.hasChanges()) {
+                  this.git.commit('chore: workflow failed with exception');
                 }
               } catch {
                 // Ignore git commit failure

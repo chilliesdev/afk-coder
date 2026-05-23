@@ -6,6 +6,7 @@ import { Agent } from '../src/daemon/agent';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'node:child_process';
+import { MockGitClient } from '../src/common/git';
 
 jest.mock('node:child_process', () => ({
   execSync: jest.fn()
@@ -598,6 +599,59 @@ describe('WorkflowManager', () => {
 
       expect(factory).toHaveBeenCalledWith(undefined);
       await workflowManager.killWorkflow('agent-test-none');
+    });
+  });
+
+  describe('Git Client Mocking Integration', () => {
+    it('should use MockGitClient when provided via GitClientFactory', async () => {
+      const mockSrcRepo = path.resolve('./mock-source-repo');
+      if (fs.existsSync(mockSrcRepo)) {
+        fs.rmSync(mockSrcRepo, { recursive: true, force: true });
+      }
+      fs.mkdirSync(mockSrcRepo, { recursive: true });
+      fs.writeFileSync(path.join(mockSrcRepo, 'PRD.md'), '# PRD');
+      fs.writeFileSync(path.join(mockSrcRepo, 'tasks.md'), '- [ ] Task 1');
+
+      const mockGit = new MockGitClient(testDir);
+      mockGit.branches.add('workflow/mock-branch');
+      mockGit.topLevel = mockSrcRepo;
+      mockGit.createWorktree = (targetPath, branch) => {
+        mockGit.worktrees.set(targetPath, branch);
+        fs.mkdirSync(targetPath, { recursive: true });
+      };
+      mockGit.addWorktree = (targetPath, branch) => {
+        mockGit.worktrees.set(targetPath, branch);
+        fs.mkdirSync(targetPath, { recursive: true });
+      };
+
+      const gitClientFactory = jest.fn().mockImplementation(() => mockGit);
+      workflowManager = new WorkflowManager(
+        () => new Agent(mockRuntime),
+        () => mockTaskBoard,
+        undefined,
+        gitClientFactory
+      );
+
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+
+      await workflowManager.startWorkflow('mock-git-workflow', testDir, {
+        isWorktree: true,
+        sourceRepo: mockSrcRepo,
+        branch: 'workflow/mock-branch'
+      });
+
+      expect(gitClientFactory).toHaveBeenCalledWith(mockSrcRepo);
+      expect(gitClientFactory).toHaveBeenCalledWith(testDir);
+
+      expect(mockGit.worktrees.get(testDir)).toBe('workflow/mock-branch');
+
+      await workflowManager.killWorkflow('mock-git-workflow');
+
+      if (fs.existsSync(mockSrcRepo)) {
+        fs.rmSync(mockSrcRepo, { recursive: true, force: true });
+      }
     });
   });
 });

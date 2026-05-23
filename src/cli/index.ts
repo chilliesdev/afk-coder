@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { DaemonClient } from './client';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { execSync } from 'node:child_process';
+import { ShellGitClient } from '../common/git';
 import { TaskValidator } from '../common/validation';
 
 const client = new DaemonClient();
@@ -283,7 +283,8 @@ program
 
       if (options.worktree) {
         try {
-          sourceRepo = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+          const gitClient = new ShellGitClient(process.cwd());
+          sourceRepo = gitClient.getTopLevel();
         } catch {
           console.error('Validation failed: --worktree must be run from inside a git repository');
           return;
