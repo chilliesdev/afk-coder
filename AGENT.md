@@ -26,7 +26,7 @@ function process(item) {
 ```
 
 ### 2. Domain Alignment
-Ensure all code alignment matches the Domain Concepts documented in [CONTEXT.md](file:///Users/apple/Documents/afk-coder/CONTEXT.md):
+Ensure all code alignment matches the Domain Concepts documented in [CONTEXT.md](file:///home/kayodematthew/afk-coder/CONTEXT.md).
 
 ### 3. Error Handling & Classifications
 * Catch exceptions at the boundary layers and classify them correctly.
@@ -36,3 +36,11 @@ Ensure all code alignment matches the Domain Concepts documented in [CONTEXT.md]
 * Always write unit tests under the `tests/` directory for any new feature or bug fix.
 * Run the test suite via `npm test` before committing changes.
 * Verify that the codebase builds correctly using `npm run build`.
+
+### 5. SOLID Principles (Required)
+Always adhere to the **SOLID** design principles to maintain a clean, modular, and highly testable architecture:
+* **Single Responsibility Principle (SRP):** Each class/module must have a single, well-defined responsibility. For example, [TaskValidator](file:///home/kayodematthew/afk-coder/src/common/validation.ts) is solely responsible for task formatting rules, while [TaskBoard](file:///home/kayodematthew/afk-coder/src/daemon/task-board.ts) manages task lifecycle state.
+* **Open/Closed Principle (OCP):** Code should be open for extension but closed for modification. Implement new behaviors (e.g., new [WorkflowPhase](file:///home/kayodematthew/afk-coder/src/daemon/workflow-phase.ts) types) by introducing new phase adapters rather than editing the core [WorkflowExecutor](file:///home/kayodematthew/afk-coder/src/daemon/workflow-executor.ts).
+* **Liskov Substitution Principle (LSP):** Subtypes must be completely substitutable for their base types/interfaces without changing the correctness of the program. Any implementation of [AgentAdapter](file:///home/kayodematthew/afk-coder/src/daemon/agent-adapter.ts) (e.g., Gemini, Aider) must adhere to the contract defined by the base interface.
+* **Interface Segregation Principle (ISP):** Clients should not be forced to depend on methods they do not use. Prefer small, highly focused interfaces (like [TaskBoardStorage](file:///home/kayodematthew/afk-coder/src/daemon/task-storage.ts)) over large, monolithic ones.
+* **Dependency Inversion Principle (DIP):** Depend on abstractions (interfaces), not concretions. For example, [TaskBoard](file:///home/kayodematthew/afk-coder/src/daemon/task-board.ts) must depend on the [TaskBoardStorage](file:///home/kayodematthew/afk-coder/src/daemon/task-storage.ts) interface rather than directly on the local filesystem, enabling seamless in-memory testing.
