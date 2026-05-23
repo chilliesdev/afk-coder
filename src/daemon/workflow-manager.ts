@@ -1,4 +1,4 @@
-import { Workflow, Task, TaskBoard as ITaskBoard } from '../common/types';
+import { Workflow, TaskBoard as ITaskBoard } from '../common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitClient, ShellGitClient } from '../common/git';

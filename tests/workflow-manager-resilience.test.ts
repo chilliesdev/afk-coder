@@ -86,12 +86,21 @@ describe('WorkflowManager Resilience', () => {
     workflow = workflowManager.getWorkflow('test-tokens')!;
     expect(workflow.status).toBe('Done');
     
-    const logOutput = workflowManager.getLogs('test-tokens');
+    jest.useRealTimers();
+
+    let logOutput = workflowManager.getLogs('test-tokens');
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const allFound = expected.every(exp =>
+        logOutput.content.includes(`"input":${exp.input},"output":${exp.output}`)
+      );
+      if (allFound) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      logOutput = workflowManager.getLogs('test-tokens');
+    }
+
     for (const exp of expected) {
       expect(logOutput.content).toContain(`"input":${exp.input},"output":${exp.output}`);
     }
-    
-    jest.useRealTimers();
   }, 30000);
 
   it('should handle 429 Too Many Requests with longer wait', async () => {

@@ -1,4 +1,4 @@
-import { Outcome, TokenUsage, AgentError, ExecutionDecision, Task } from '../common/types';
+import { Outcome, TokenUsage, AgentError, ExecutionDecision } from '../common/types';
 
 export class OutcomeAnalyzer {
   constructor(private maxRetries: number = 3) {}
@@ -12,7 +12,7 @@ export class OutcomeAnalyzer {
     const tokens = this.extractTokenUsage(logs);
     const hasNewCompletedTasks = newlyCompletedCount > 0;
 
-    let error = this.classifyError(logs, exitCode);
+    let error = this.classifyError(logs);
 
     if (exitCode === 0 && !hasNewCompletedTasks) {
       error = {
@@ -72,7 +72,7 @@ export class OutcomeAnalyzer {
       };
     }
 
-    const error = this.classifyError(logs, exitCode);
+    const error = this.classifyError(logs);
     return {
       success: false,
       tokens,
@@ -106,7 +106,7 @@ export class OutcomeAnalyzer {
     return { input: 0, output: 0, total: 0 };
   }
 
-  private classifyError(logs: string, exitCode: number): AgentError | undefined {
+  private classifyError(logs: string): AgentError | undefined {
     // Quota Errors
     if (/429|Too Many Requests|Quota exceeded|Resource has been exhausted/i.test(logs)) {
       return {

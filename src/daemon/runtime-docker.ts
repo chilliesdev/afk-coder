@@ -142,7 +142,7 @@ export class DockerRuntime implements ExecutionRuntime {
    * If start() has been called, executes the command in the persistent container.
    * Otherwise, creates a temporary container for backwards compatibility.
    */
-  async run(prompt: string, dir: string, configDir?: string): Promise<RuntimeHandle> {
+  async run(prompt: string, _dir: string, _configDir?: string): Promise<RuntimeHandle> {
     if (this.container) {
       const container = this.container;
       const exec = await container.exec({

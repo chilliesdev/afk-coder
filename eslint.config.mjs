@@ -23,7 +23,14 @@ export default tseslint.config(
       'unicorn/no-array-for-each': 'off',
       'unicorn/text-encoding-identifier-case': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off', // Turning this off for now so existing code isn't too noisy
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
     },
   },
   {
