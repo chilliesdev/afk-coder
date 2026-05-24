@@ -60,7 +60,7 @@ describe('Agent Task Generation', () => {
 
     const res = await agent.generateTasks(TEST_DIR, 'PRD.md');
     expect(res.success).toBe(true);
-    expect(res.logs).toContain('from stdout');
+    expect(res.logs).toContain('Successfully generated tasks.md');
     expect(fs.readFileSync(path.join(TEST_DIR, 'tasks.md'), 'utf8')).toBe('- [ ] Task from stdout 1\n- [ ] Task from stdout 2');
     expect(mockRuntime.startCalled).toBe(true);
     expect(mockRuntime.stopCalled).toBe(true);

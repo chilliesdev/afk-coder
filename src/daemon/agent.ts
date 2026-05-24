@@ -285,25 +285,34 @@ export class Agent {
         return { success: false, error: 'File disappeared during generation' };
       }
 
-      const content = fs.readFileSync(tasksPath, 'utf8');
-      if (content.trim() !== '') {
-        this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, 'Successfully generated tasks.md');
-        return { success: true, logs: 'Successfully generated tasks.md' };
+      let content = fs.readFileSync(tasksPath, 'utf8');
+      if (content.trim() === '') {
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Parsing tasks from agent output...');
+        const validator = new TaskValidator();
+        const tasks = validator.parseTasks(result.logs);
+        if (tasks.length === 0) {
+          fs.unlinkSync(tasksPath);
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, 'No tasks found in output');
+          return { success: false, error: 'No tasks found in output', logs: result.logs };
+        }
+
+        const lines = tasks.map(t => `- [${t.completed ? 'x' : ' '}] ${t.description}`);
+        content = lines.join('\n');
+        fs.writeFileSync(tasksPath, content);
       }
 
-      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Parsing tasks from agent output...');
-      const validator = new TaskValidator();
-      const tasks = validator.parseTasks(result.logs);
-      if (tasks.length === 0) {
-        fs.unlinkSync(tasksPath);
-        this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, 'No tasks found in output');
-        return { success: false, error: 'No tasks found in output', logs: result.logs };
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, 'Validating generated tasks...');
+      try {
+        const validator = new TaskValidator();
+        validator.validateTasks(content);
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, 'Tasks validated');
+      } catch (error: any) {
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Validation failed: ${error.message}`);
+        return { success: false, error: `Validation failed: ${error.message}`, logs: result.logs };
       }
 
-      const lines = tasks.map(t => `- [${t.completed ? 'x' : ' '}] ${t.description}`);
-      fs.writeFileSync(tasksPath, lines.join('\n'));
       this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, 'Successfully generated tasks.md');
-      return { success: true, logs: 'Successfully generated tasks.md (from stdout)' };
+      return { success: true, logs: 'Successfully generated tasks.md' };
     } catch (error: any) {
       if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
         fs.unlinkSync(tasksPath);

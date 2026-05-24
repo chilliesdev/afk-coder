@@ -29,7 +29,7 @@ describe('Agent', () => {
         if (p.endsWith('tasks.md')) return false;
         return false;
     });
-    (fs.readFileSync as jest.Mock).mockReturnValue('mock tasks');
+    (fs.readFileSync as jest.Mock).mockReturnValue('- [ ] mock task');
   });
 
   it('should run autonomous loop with correct prompt', async () => {
@@ -65,13 +65,13 @@ describe('Agent', () => {
       }));
     });
 
-    it('should emit STARTING and COMPLETED milestones for task generation', async () => {
+    it('should emit STARTING and COMPLETED milestones for task generation and validation', async () => {
       const milestones: MilestoneEvent[] = [];
       const onMilestone = (e: MilestoneEvent) => milestones.push(e);
 
       // Mock successful run
       mockRuntime.nextResult = { exitCode: 0, logs: 'Successfully generated tasks.md' };
-      (fs.readFileSync as jest.Mock).mockReturnValue('mock tasks content');
+      (fs.readFileSync as jest.Mock).mockReturnValue('- [ ] mock task content');
       
       let tasksCreated = false;
       (fs.writeFileSync as jest.Mock).mockImplementation((p: string) => {
@@ -89,6 +89,16 @@ describe('Agent', () => {
       expect(milestones).toContainEqual(expect.objectContaining({
         status: MILESTONE_STATUS.STARTING,
         message: 'Analyzing PRD and generating tasks...'
+      }));
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.STARTING,
+        message: 'Validating generated tasks...'
+      }));
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.COMPLETED,
+        message: 'Tasks validated'
       }));
 
       expect(milestones).toContainEqual(expect.objectContaining({
