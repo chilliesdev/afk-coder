@@ -16,7 +16,7 @@ const validator = new TaskValidator();
 const sendCommand = client.sendCommand.bind(client);
 const validateWorkflowDir = validator.validateWorkflowDir.bind(validator);
 
-const program = new Command();
+export const program = new Command();
 
 
 program
@@ -673,6 +673,8 @@ configCmd
     }
   });
 
-program.parse();
+if (require.main === module) {
+  program.parse();
+}
 
 

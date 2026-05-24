@@ -5,6 +5,6 @@
 - [x] Implement a lightweight terminal spinner utility in `src/cli/ui.ts` (or similar)
 - [x] Update the `init` command in `src/cli/index.ts` to render progress milestones using the spinner
 - [x] Ensure terminal cursor and state cleanup in CLI on command completion or failure
-- [ ] Add unit tests for NDJSON stream parsing in the CLI client
-- [ ] Add integration tests for the `init` command's progress feedback loop
-- [ ] Verify that existing commands (`status`, `start`, `logs`) remain unaffected and backward-compatible
+- [x] Add unit tests for NDJSON stream parsing in the CLI client
+- [x] Add integration tests for the `init` command's progress feedback loop
+- [x] Verify that existing commands (`status`, `start`, `logs`) remain unaffected and backward-compatible

@@ -156,4 +156,71 @@ describe('DaemonClient NDJSON Streaming', () => {
     const result = await promise;
     expect(result).toEqual(response);
   });
+
+  it('should ignore malformed JSON lines', async () => {
+    const promise = client.sendCommand('test', {});
+
+    const handlers: Record<string, Function> = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+
+    const response = { success: true };
+    handlers['data'](Buffer.from('not a json\n'));
+    handlers['data'](Buffer.from(JSON.stringify(response) + '\n'));
+    handlers['end']();
+
+    const result = await promise;
+    expect(result).toEqual(response);
+  });
+
+  it('should handle non-object JSON values correctly', async () => {
+    const promise = client.sendCommand('test', {});
+
+    const handlers: Record<string, Function> = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+
+    handlers['data'](Buffer.from('true\n')); // Should be treated as finalResponse
+    handlers['data'](Buffer.from('123\n'));  // Should overwrite finalResponse
+    handlers['data'](Buffer.from('"final"\n')); // Should overwrite again
+    handlers['end']();
+
+    const result = await promise;
+    expect(result).toBe('final');
+  });
+
+  it('should use the last non-milestone object as the final response', async () => {
+    const promise = client.sendCommand('test', {});
+
+    const handlers: Record<string, Function> = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+
+    handlers['data'](Buffer.from(JSON.stringify({ success: true, part: 1 }) + '\n'));
+    handlers['data'](Buffer.from(JSON.stringify({ success: true, part: 2 }) + '\n'));
+    handlers['end']();
+
+    const result = await promise;
+    expect(result).toEqual({ success: true, part: 2 });
+  });
+
+  it('should handle empty lines or lines with only whitespace', async () => {
+    const promise = client.sendCommand('test', {});
+
+    const handlers: Record<string, Function> = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+
+    const response = { success: true };
+    handlers['data'](Buffer.from('\n  \n\t\n'));
+    handlers['data'](Buffer.from(JSON.stringify(response) + '\n'));
+    handlers['end']();
+
+    const result = await promise;
+    expect(result).toEqual(response);
+  });
 });
