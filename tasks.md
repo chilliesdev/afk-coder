@@ -1,7 +1,7 @@
 - [x] Define `MilestoneEvent` type and constants for progress reporting
 - [x] Update `Agent.generateTasks()` in `src/daemon/agent.ts` to accept a milestone callback
 - [x] Implement milestone reporting in `src/daemon/workflow-manager.ts` (or relevant daemon handler) for the `init` workflow
-- [ ] Modify `DaemonClient` in `src/cli/client.ts` to handle NDJSON streaming of status events
+- [x] Modify `DaemonClient` in `src/cli/client.ts` to handle NDJSON streaming of status events
 - [ ] Implement a lightweight terminal spinner utility in `src/cli/ui.ts` (or similar)
 - [ ] Update the `init` command in `src/cli/index.ts` to render progress milestones using the spinner
 - [ ] Ensure terminal cursor and state cleanup in CLI on command completion or failure

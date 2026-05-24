@@ -37,8 +37,10 @@ export class DaemonClient {
           if (line.trim()) {
             try {
               const parsed = JSON.parse(line);
-              if (parsed.type === MILESTONE_TYPE && onMilestone) {
-                onMilestone(parsed);
+              if (parsed.type === MILESTONE_TYPE) {
+                if (onMilestone) {
+                  onMilestone(parsed);
+                }
               } else {
                 finalResponse = parsed;
               }
@@ -54,8 +56,10 @@ export class DaemonClient {
         if (buffer.trim()) {
           try {
             const parsed = JSON.parse(buffer);
-            if (parsed.type === MILESTONE_TYPE && onMilestone) {
-              onMilestone(parsed);
+            if (parsed.type === MILESTONE_TYPE) {
+              if (onMilestone) {
+                onMilestone(parsed);
+              }
             } else {
               finalResponse = parsed;
             }
