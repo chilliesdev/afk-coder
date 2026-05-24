@@ -255,8 +255,9 @@ export class Agent {
     }
 
     try {
-      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Starting execution runtime...');
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, 'Starting execution runtime...');
       await this.start(resolvedDir, configDir);
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, 'Execution runtime started');
     } catch (error: any) {
       if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
         fs.unlinkSync(tasksPath);
