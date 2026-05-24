@@ -6,6 +6,9 @@ import { ShellGitClient } from '../common/git';
 import { TaskValidator } from '../common/validation';
 import { Spinner } from './ui';
 import { MILESTONE_STATUS } from '../common/types';
+import { registerCleanupHandlers } from './cleanup';
+
+registerCleanupHandlers();
 
 const client = new DaemonClient();
 const validator = new TaskValidator();
@@ -14,6 +17,7 @@ const sendCommand = client.sendCommand.bind(client);
 const validateWorkflowDir = validator.validateWorkflowDir.bind(validator);
 
 const program = new Command();
+
 
 program
   .name('afk-coder')
@@ -64,6 +68,8 @@ program
       }
     } catch (error: any) {
       spinner.stop(`Error: ${error.message}`, false);
+    } finally {
+      spinner.stop();
     }
   });
 
@@ -667,19 +673,6 @@ configCmd
     }
   });
 
-// Global cleanup for terminal state (e.g. restoring cursor if spinner was active)
-const cleanup = () => {
-  process.stdout.write('\u001B[?25h'); // Show cursor
-};
-
-process.on('SIGINT', () => {
-  cleanup();
-  process.exit(130);
-});
-
-process.on('SIGTERM', () => {
-  cleanup();
-  process.exit(143);
-});
-
 program.parse();
+
+
