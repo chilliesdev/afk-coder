@@ -65,6 +65,38 @@ describe('Agent', () => {
       }));
     });
 
+    it('should emit STARTING and COMPLETED milestones for task generation', async () => {
+      const milestones: MilestoneEvent[] = [];
+      const onMilestone = (e: MilestoneEvent) => milestones.push(e);
+
+      // Mock successful run
+      mockRuntime.nextResult = { exitCode: 0, logs: 'Successfully generated tasks.md' };
+      (fs.readFileSync as jest.Mock).mockReturnValue('mock tasks content');
+      
+      let tasksCreated = false;
+      (fs.writeFileSync as jest.Mock).mockImplementation((p: string) => {
+        if (p.endsWith('tasks.md')) tasksCreated = true;
+      });
+
+      (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
+        if (p.endsWith('PRD.md')) return true;
+        if (p.endsWith('tasks.md')) return tasksCreated;
+        return false;
+      });
+
+      await agent.generateTasks('/some/dir', 'PRD.md', false, undefined, onMilestone);
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.STARTING,
+        message: 'Analyzing PRD and generating tasks...'
+      }));
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.COMPLETED,
+        message: 'Successfully generated tasks.md'
+      }));
+    });
+
     it('should emit FAILED milestone if runtime start fails', async () => {
       jest.spyOn(mockRuntime, 'start').mockRejectedValue(new Error('Docker failed'));
       const milestones: MilestoneEvent[] = [];

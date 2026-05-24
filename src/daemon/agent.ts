@@ -267,7 +267,7 @@ export class Agent {
     }
 
     try {
-      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Analyzing PRD and generating tasks...');
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, 'Analyzing PRD and generating tasks...');
       const prompt = this.adapter.getTaskGenerationCommand(prdFilename);
       const run = await this.runtime.run(prompt, resolvedDir, configDir);
       const result = await run.wait();
