@@ -1,4 +1,4 @@
-import { Workflow, TaskBoard as ITaskBoard } from '../common/types';
+import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent } from '../common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitClient, ShellGitClient } from '../common/git';
@@ -183,6 +183,11 @@ export class WorkflowManager {
 
     this.workflows.delete(name);
     this.loggers.delete(name);
+  }
+
+  async init(args: { dir: string, prd: string, force?: boolean, configDir?: string, agent?: string }, onMilestone?: (milestone: MilestoneEvent) => void) {
+    const agent = this.agentFactory(args.agent);
+    return await agent.generateTasks(args.dir, args.prd, args.force, args.configDir, onMilestone);
   }
 
   getLogs(name: string, options: { tail?: number, offset?: number } = {}) {
