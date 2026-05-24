@@ -116,4 +116,23 @@ describe('Agent Task Generation', () => {
     expect(mockRuntime.startCalled).toBe(true);
     expect(mockRuntime.stopCalled).toBe(true);
   });
+
+  it('should report milestones during task generation', async () => {
+    fs.writeFileSync(path.join(TEST_DIR, 'PRD.md'), '# PRD Content');
+    mockRuntime.nextResult = {
+      exitCode: 0,
+      logs: 'Logs\n- [ ] Task from stdout 1'
+    };
+
+    const milestones: any[] = [];
+    const onMilestone = (m: any) => milestones.push(m);
+
+    await agent.generateTasks(TEST_DIR, 'PRD.md', false, undefined, onMilestone);
+
+    expect(milestones.length).toBeGreaterThan(0);
+    expect(milestones[0].status).toBe('starting');
+    expect(milestones.some(m => m.status === 'completed')).toBe(true);
+    expect(milestones.every(m => m.type === 'milestone')).toBe(true);
+    expect(milestones.every(m => m.timestamp)).toBe(true);
+  });
 });

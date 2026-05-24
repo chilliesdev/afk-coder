@@ -11,7 +11,10 @@ export interface GitClient {
   addWorktree(targetPath: string, branch: string): void;
   createWorktree(targetPath: string, branch: string): void;
   removeWorktree(targetPath: string): void;
+  addSafeDirectory(targetPath: string): void;
+  removeSafeDirectory(targetPath: string): void;
 }
+
 
 export class ShellGitClient implements GitClient {
   constructor(private readonly dir: string) {}
@@ -77,6 +80,22 @@ export class ShellGitClient implements GitClient {
   removeWorktree(targetPath: string): void {
     this.exec(['worktree', 'remove', '--force', `"${targetPath}"`]);
   }
+
+  addSafeDirectory(targetPath: string): void {
+    try {
+      execSync(`git config --global --add safe.directory "${targetPath}"`, { stdio: 'ignore' });
+    } catch {
+      // Ignore errors if global config is not writable
+    }
+  }
+
+  removeSafeDirectory(targetPath: string): void {
+    try {
+      execSync(`git config --global --unset-all safe.directory "${targetPath}"`, { stdio: 'ignore' });
+    } catch {
+      // Ignore errors
+    }
+  }
 }
 
 export class MockGitClient implements GitClient {
@@ -129,5 +148,15 @@ export class MockGitClient implements GitClient {
 
   removeWorktree(targetPath: string): void {
     this.worktrees.delete(targetPath);
+  }
+
+  public safeDirectories: string[] = [];
+
+  addSafeDirectory(targetPath: string): void {
+    this.safeDirectories.push(targetPath);
+  }
+
+  removeSafeDirectory(targetPath: string): void {
+    this.safeDirectories = this.safeDirectories.filter(d => d !== targetPath);
   }
 }

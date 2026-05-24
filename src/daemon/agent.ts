@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { ExecutionRuntime, RuntimeHandle } from './execution-runtime';
 import { TaskValidator } from '../common/validation';
 import { OutcomeAnalyzer } from './agent-outcome';
-import { Task, TokenUsage, TaskBoard as ITaskBoard } from '../common/types';
+import { Task, TokenUsage, TaskBoard as ITaskBoard, MilestoneEvent, MilestoneStatus } from '../common/types';
 import * as winston from 'winston';
 import { AgentAdapter } from './agent-adapter';
 import { GeminiAdapter } from './agent-gemini';
@@ -209,40 +209,64 @@ export class Agent {
     return { success: false, tokenUsage, error: 'Agent killed' };
   }
 
+  private emitMilestone(
+    onMilestone: ((event: MilestoneEvent) => void) | undefined,
+    status: MilestoneStatus,
+    message: string
+  ) {
+    if (onMilestone) {
+      onMilestone({
+        type: 'milestone',
+        status,
+        message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
   async generateTasks(
     dir: string,
     prdFilename: string,
     force?: boolean,
-    configDir?: string
+    configDir?: string,
+    onMilestone?: (event: MilestoneEvent) => void
   ): Promise<{ success: boolean; logs?: string; error?: string }> {
     const resolvedDir = path.resolve(dir);
     const prdPath = path.join(resolvedDir, prdFilename);
     const tasksPath = path.join(resolvedDir, 'tasks.md');
 
+    this.emitMilestone(onMilestone, 'starting', 'Starting task generation...');
+
     if (!fs.existsSync(prdPath)) {
+      this.emitMilestone(onMilestone, 'failed', `PRD not found: ${prdFilename}`);
       return { success: false, error: `${prdFilename} not found in ${resolvedDir}` };
     }
 
     if (fs.existsSync(tasksPath) && !force) {
+      this.emitMilestone(onMilestone, 'failed', 'tasks.md already exists');
       return { success: false, error: `tasks.md already exists in ${resolvedDir}. Use --force to overwrite.` };
     }
 
     try {
       fs.writeFileSync(tasksPath, '');
     } catch (error: any) {
+      this.emitMilestone(onMilestone, 'failed', `Failed to create tasks.md: ${error.message}`);
       return { success: false, error: `Failed to create tasks.md: ${error.message}` };
     }
 
     try {
+      this.emitMilestone(onMilestone, 'info', 'Starting execution runtime...');
       await this.start(resolvedDir, configDir);
     } catch (error: any) {
       if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
         fs.unlinkSync(tasksPath);
       }
+      this.emitMilestone(onMilestone, 'failed', `Failed to start runtime: ${error.message}`);
       return { success: false, error: `Failed to start execution runtime: ${error.message}` };
     }
 
     try {
+      this.emitMilestone(onMilestone, 'info', 'Analyzing PRD and generating tasks...');
       const prompt = this.adapter.getTaskGenerationCommand(prdFilename);
       const run = await this.runtime.run(prompt, resolvedDir, configDir);
       const result = await run.wait();
@@ -251,32 +275,39 @@ export class Agent {
         if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
           fs.unlinkSync(tasksPath);
         }
+        this.emitMilestone(onMilestone, 'failed', `Generation failed with exit code ${result.exitCode}`);
         return { success: false, error: `Exit code ${result.exitCode}`, logs: result.logs };
       }
 
       if (!fs.existsSync(tasksPath)) {
+        this.emitMilestone(onMilestone, 'failed', 'tasks.md disappeared during generation');
         return { success: false, error: 'File disappeared during generation' };
       }
 
       const content = fs.readFileSync(tasksPath, 'utf8');
       if (content.trim() !== '') {
+        this.emitMilestone(onMilestone, 'completed', 'Successfully generated tasks.md');
         return { success: true, logs: 'Successfully generated tasks.md' };
       }
 
+      this.emitMilestone(onMilestone, 'info', 'Parsing tasks from agent output...');
       const validator = new TaskValidator();
       const tasks = validator.parseTasks(result.logs);
       if (tasks.length === 0) {
         fs.unlinkSync(tasksPath);
+        this.emitMilestone(onMilestone, 'failed', 'No tasks found in output');
         return { success: false, error: 'No tasks found in output', logs: result.logs };
       }
 
       const lines = tasks.map(t => `- [${t.completed ? 'x' : ' '}] ${t.description}`);
       fs.writeFileSync(tasksPath, lines.join('\n'));
+      this.emitMilestone(onMilestone, 'completed', 'Successfully generated tasks.md');
       return { success: true, logs: 'Successfully generated tasks.md (from stdout)' };
     } catch (error: any) {
       if (fs.existsSync(tasksPath) && fs.readFileSync(tasksPath, 'utf8').trim() === '') {
         fs.unlinkSync(tasksPath);
       }
+      this.emitMilestone(onMilestone, 'failed', `Error: ${error.message}`);
       return { success: false, error: error.message };
     } finally {
       await this.stop();

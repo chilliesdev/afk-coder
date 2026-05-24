@@ -65,6 +65,15 @@ export interface Workflow {
   qaCycles?: number;
 }
 
+export type MilestoneStatus = 'starting' | 'completed' | 'failed' | 'info';
+
+export interface MilestoneEvent {
+  type: 'milestone';
+  status: MilestoneStatus;
+  message: string;
+  timestamp: string;
+}
+
 export interface DaemonResponse<T = any> {
   success: boolean;
   message?: string;

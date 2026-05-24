@@ -1,5 +1,5 @@
 import * as net from 'node:net';
-import { DaemonResponse } from '../common/types';
+import { DaemonResponse, MilestoneEvent } from '../common/types';
 import { ConfigManager } from '../common/config';
 
 export class DaemonClient {
@@ -15,7 +15,7 @@ export class DaemonClient {
     this.socketPath = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath || '/tmp/afk-coder.sock';
   }
 
-  async sendCommand(command: string, args: any = {}): Promise<DaemonResponse> {
+  async sendCommand(command: string, args: any = {}, onMilestone?: (milestone: MilestoneEvent) => void): Promise<DaemonResponse> {
     return new Promise((resolve, reject) => {
       if (!this.socketPath) {
         reject(new Error('Socket path is not defined.'));
@@ -25,16 +25,49 @@ export class DaemonClient {
         client.write(JSON.stringify({ command, args }));
       });
 
-      let responseData = '';
+      let buffer = '';
+      let finalResponse: DaemonResponse | undefined;
+
       client.on('data', (data) => {
-        responseData += data.toString();
+        buffer += data.toString();
+        let boundary = buffer.indexOf('\n');
+        while (boundary !== -1) {
+          const line = buffer.substring(0, boundary);
+          buffer = buffer.substring(boundary + 1);
+          if (line.trim()) {
+            try {
+              const parsed = JSON.parse(line);
+              if (parsed.type === 'milestone' && onMilestone) {
+                onMilestone(parsed);
+              } else {
+                finalResponse = parsed;
+              }
+            } catch {
+              // Ignore parse errors for partial lines or logs
+            }
+          }
+          boundary = buffer.indexOf('\n');
+        }
       });
 
       client.on('end', () => {
-        try {
-          resolve(JSON.parse(responseData));
-        } catch {
-          reject(new Error('Failed to parse daemon response'));
+        if (buffer.trim()) {
+          try {
+            const parsed = JSON.parse(buffer);
+            if (parsed.type === 'milestone' && onMilestone) {
+              onMilestone(parsed);
+            } else {
+              finalResponse = parsed;
+            }
+          } catch {
+            // Ignore
+          }
+        }
+
+        if (finalResponse) {
+          resolve(finalResponse);
+        } else {
+          reject(new Error('No response from daemon'));
         }
       });
 

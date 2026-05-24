@@ -33,6 +33,15 @@ describe('GitClient', () => {
       git.removeWorktree('/mock/wt');
       expect(git.worktrees.has('/mock/wt')).toBe(false);
     });
+
+    it('should correctly simulate safe directory operations', () => {
+      const git = new MockGitClient('/mock/path');
+      git.addSafeDirectory('/mock/safe-dir');
+      expect(git.safeDirectories).toContain('/mock/safe-dir');
+
+      git.removeSafeDirectory('/mock/safe-dir');
+      expect(git.safeDirectories).not.toContain('/mock/safe-dir');
+    });
   });
 
   describe('ShellGitClient', () => {
@@ -88,6 +97,21 @@ describe('GitClient', () => {
 
       expect(git.hasBranch('test-branch')).toBe(true);
       expect(git.hasBranch('non-existent-branch')).toBe(false);
+    });
+
+    it('should add and remove safe directory globally', () => {
+      const git = new ShellGitClient(testRepoDir);
+      const testPath = '/tmp/dummy-test-safe-dir';
+
+      expect(() => git.addSafeDirectory(testPath)).not.toThrow();
+
+      const globalConfig = execSync('git config --global --get-all safe.directory || true', { encoding: 'utf-8' });
+      expect(globalConfig).toContain(testPath);
+
+      expect(() => git.removeSafeDirectory(testPath)).not.toThrow();
+
+      const globalConfigAfter = execSync('git config --global --get-all safe.directory || true', { encoding: 'utf-8' });
+      expect(globalConfigAfter).not.toContain(testPath);
     });
   });
 });

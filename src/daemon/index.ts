@@ -72,7 +72,15 @@ const server = net.createServer((socket) => {
       switch (request.command) {
         case 'init': {
           const agent = agentFactory(request.args.agent);
-          const initResult = await agent.generateTasks(request.args.dir, request.args.prd, request.args.force, request.args.configDir);
+          const initResult = await agent.generateTasks(
+            request.args.dir,
+            request.args.prd,
+            request.args.force,
+            request.args.configDir,
+            (milestone) => {
+              socket.write(JSON.stringify(milestone) + '\n');
+            }
+          );
           response = { success: initResult.success, message: initResult.error, data: initResult.logs };
           break;
         }
@@ -107,8 +115,11 @@ const server = net.createServer((socket) => {
           break;
         }
         case 'remove': {
+          const wf = workflowManager.getWorkflow(request.args.name);
+          const dir = wf?.dir;
+          const isWorktree = wf?.isWorktree;
           workflowManager.removeWorkflow(request.args.name);
-          response = { success: true, message: `Removed ${request.args.name}` };
+          response = { success: true, message: `Removed ${request.args.name}`, data: { dir, isWorktree } };
           break;
         }
         case 'logs': {
@@ -123,9 +134,9 @@ const server = net.createServer((socket) => {
         }
       }
 
-      socket.write(JSON.stringify(response));
+      socket.write(JSON.stringify(response) + '\n');
     } catch (error: any) {
-      socket.write(JSON.stringify({ success: false, message: error.message }));
+      socket.write(JSON.stringify({ success: false, message: error.message }) + '\n');
     } finally {
       socket.end();
     }

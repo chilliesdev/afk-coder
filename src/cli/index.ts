@@ -294,7 +294,7 @@ program
         const randomSuffix = randomBytes(3).toString('hex');
 
         branch = options.branch || `${workflowName}-${randomSuffix}`;
-        dir = options.dir ? path.resolve(options.dir) : path.resolve(`${workflowName}-${randomSuffix}`);
+        dir = options.dir ? path.resolve(options.dir) : path.resolve(sourceRepo, '.afk-coder', 'worktress', `${workflowName}-${randomSuffix}`);
       } else {
         dir = path.resolve(options.dir || '.');
       }
@@ -322,6 +322,14 @@ program
       if (!response.success) {
         console.error(`Failed to start workflow: ${response.message}`);
         return;
+      }
+      if (options.worktree) {
+        try {
+          const gitClient = new ShellGitClient(sourceRepo || process.cwd());
+          gitClient.addSafeDirectory(dir);
+        } catch (err: any) {
+          console.warn(`Warning: Could not configure git safe.directory for ${dir}: ${err.message}`);
+        }
       }
       console.log(`Workflow ${workflowName} started successfully.`);
     } catch (error: any) {
@@ -451,6 +459,14 @@ program
       if (!response.success) {
         console.error(`Failed to remove workflow: ${response.message}`);
         return;
+      }
+      if (response.data && response.data.isWorktree && response.data.dir) {
+        try {
+          const gitClient = new ShellGitClient(process.cwd());
+          gitClient.removeSafeDirectory(response.data.dir);
+        } catch {
+          // Ignore errors
+        }
       }
       console.log(`Workflow ${workflowName} removed.`);
     } catch (error: any) {
