@@ -5,8 +5,8 @@ After=network.target docker.service
 [Service]
 ExecStart=/usr/local/bin/afk-coder-daemon
 Restart=always
-User=afk-coder
-Group=afk-coder
+User=@USER@
+Group=@GROUP@
 Environment=NODE_ENV=production
 
 [Install]

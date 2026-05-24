@@ -6,28 +6,23 @@ echo "Building project..."
 npm install --no-audit --no-fund
 npm run build
 
-# Create afk-coder user and groups if they don't exist
-if ! getent group afk-coder > /dev/null; then
-    sudo groupadd afk-coder
-fi
-if ! getent group afk-coder-users > /dev/null; then
-    sudo groupadd afk-coder-users
-fi
-if ! getent passwd afk-coder > /dev/null; then
-    sudo useradd -r -g afk-coder -G afk-coder-users -s /sbin/nologin afk-coder
-else
-    sudo usermod -aG afk-coder-users afk-coder
-fi
-
-# Add afk-coder to docker group so it can run containers
-if getent group docker > /dev/null; then
-    sudo usermod -aG docker afk-coder
-fi
-
-# Add afk-coder to the invoking user's group to allow workspace access
+# Determine target user and group (invoking user under sudo, or current user)
 if [ -n "$SUDO_USER" ]; then
-    sudo usermod -aG "$SUDO_USER" afk-coder
-    echo "Added afk-coder to the $SUDO_USER group for workspace access."
+    TARGET_USER="$SUDO_USER"
+else
+    TARGET_USER="$USER"
+fi
+TARGET_GROUP=$(id -gn "$TARGET_USER")
+
+echo "Installing afk-coder service to run as user: $TARGET_USER, group: $TARGET_GROUP"
+
+# Verify docker group membership for the target user
+if getent group docker > /dev/null; then
+    if ! id -nG "$TARGET_USER" | grep -qw docker; then
+        sudo usermod -aG docker "$TARGET_USER"
+        echo "Added $TARGET_USER to the docker group so it can run sandboxed containers."
+        echo "Note: You may need to restart your session for group changes to take effect."
+    fi
 fi
 
 # Create directories
@@ -42,8 +37,8 @@ sudo cp bin/afk-coder-daemon /usr/local/bin/afk-coder-daemon
 sudo chmod +x /usr/local/bin/afk-coder
 sudo chmod +x /usr/local/bin/afk-coder-daemon
 
-# Install systemd service
-sudo cp afk-coder.service /etc/systemd/system/
+# Install systemd service with user templating
+sed -e "s/@USER@/$TARGET_USER/g" -e "s/@GROUP@/$TARGET_GROUP/g" afk-coder.service | sudo tee /etc/systemd/system/afk-coder.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable afk-coder.service
 

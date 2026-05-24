@@ -45,22 +45,17 @@ chmod +x install.sh
 
 This script will:
 1. Build the project.
-2. Create dedicated `afk-coder` (service) and `afk-coder-users` (access) groups.
-3. Create a dedicated `afk-coder` system user.
-4. Install binaries to `/usr/local/bin/`.
-5. Register and enable the `afk-coder.service` systemd unit.
+2. Install binaries to `/usr/local/bin/`.
+3. Register and enable the `afk-coder.service` systemd unit, dynamically configured to run under the user and group of the account executing the installer.
 
-### User Access
-By default, the daemon socket is owned by the `afk-coder-users` group. To allow a non-root user to use the `afk-coder` CLI, add them to this group:
+### User Access & Permissions
+Since the daemon runs as the logged-in user who ran the installation script, it naturally inherits all of your user's permissions and has full read/write access to your home directory, active workspaces, and git repositories.
 
+**Docker Access:** Ensure your user is a member of the `docker` group so the daemon can run sandboxed containers:
 ```bash
-sudo usermod -aG afk-coder-users $USER
+# The installation script will attempt to add you automatically if you are not already a member
+sudo usermod -aG docker $USER
 # Log out and back in for changes to take effect
-```
-
-**Workspace Access:** The daemon runs as the `afk-coder` user. To allow it to read and write to projects inside your home directory, the installation script automatically adds the `afk-coder` user to your personal user group. If you install it manually or for a different user, you may need to run:
-```bash
-sudo usermod -aG $USER afk-coder
 ```
 
 Finally, start the daemon:
@@ -189,7 +184,7 @@ When running the daemon binary directly (e.g., for development or debugging):
 ## 🛡️ Security
 
 - **Isolation:** All LLM-generated commands are executed inside a Docker container.
-- **Privilege:** The daemon runs as a restricted `afk-coder` user, while the *internal* sandbox has root access for setup.
+- **Privilege:** The daemon runs as your normal logged-in user, while the *internal* sandbox has root access for setup.
 - **Auth:** Google OAuth 2.0 with PKCE ensures secure access to your AI subscription.
 
 ---
