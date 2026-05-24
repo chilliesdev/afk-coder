@@ -31,7 +31,8 @@ program
   .option('--prd <filename>', 'Name of the PRD file', 'PRD.md')
   .option('--force', 'Overwrite existing tasks.md')
   .action(async (options) => {
-    const spinner = new Spinner('Initializing...');
+    const spinner = new Spinner('Connecting to daemon...');
+    spinner.start();
     try {
       const dir = path.resolve(options.dir);
       const { CONFIG_DIR } = await import('../common/config');

@@ -8,3 +8,8 @@
 - [x] Add unit tests for NDJSON stream parsing in the CLI client
 - [x] Add integration tests for the `init` command's progress feedback loop
 - [x] Verify that existing commands (`status`, `start`, `logs`) remain unaffected and backward-compatible
+- [x] Ensure CLI `init` command provides immediate feedback upon connection before first milestone [PRD: User Story 1]
+- [ ] Implement discrete milestones (STARTING/COMPLETED) in `Agent.generateTasks` for Docker startup to show a checkmark [PRD: User Story 3]
+- [ ] Implement discrete milestones (STARTING/COMPLETED) in `Agent.generateTasks` for task generation to show a checkmark [PRD: User Story 5]
+- [ ] Add milestone reporting for the task validation step in `Agent.generateTasks` [PRD: User Story 6]
+- [ ] Fix duplicate spinner completion messages and ensure correct symbols on failure in CLI `init` command [PRD: User Story 8]
