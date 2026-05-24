@@ -5,6 +5,7 @@ export class Spinner {
   private currentFrame = 0;
   private readonly frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   private message = '';
+  private isActive = false;
 
   constructor(message = '') {
     this.message = message;
@@ -14,6 +15,8 @@ export class Spinner {
     if (message) {
       this.message = message;
     }
+
+    this.isActive = true;
 
     if (!process.stdout.isTTY) {
       console.log(this.message);
@@ -44,26 +47,30 @@ export class Spinner {
   }
 
   stop(finalMessage?: string, success = true) {
+    if (!this.isActive) {
+      return;
+    }
+
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
 
-    if (!process.stdout.isTTY) {
-      const symbol = success ? '✔' : '✖';
-      console.log(`${symbol} ${finalMessage || this.message}`);
-      return;
-    }
-
-    const symbol = success ? '\u001B[32m✔\u001B[0m' : '\u001B[31m✖\u001B[0m';
+    const symbol = success ? (process.stdout.isTTY ? '\u001B[32m✔\u001B[0m' : '✔') : (process.stdout.isTTY ? '\u001B[31m✖\u001B[0m' : '✖');
     const message = finalMessage || this.message;
 
-    readline.cursorTo(process.stdout, 0);
-    readline.clearLine(process.stdout, 0);
-    process.stdout.write(`${symbol} ${message}\n`);
+    if (!process.stdout.isTTY) {
+      console.log(`${symbol} ${message}`);
+    } else {
+      readline.cursorTo(process.stdout, 0);
+      readline.clearLine(process.stdout, 0);
+      process.stdout.write(`${symbol} ${message}\n`);
 
-    // Show cursor
-    process.stdout.write('\u001B[?25h');
+      // Show cursor
+      process.stdout.write('\u001B[?25h');
+    }
+
+    this.isActive = false;
   }
 
   private render() {
