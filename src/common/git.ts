@@ -21,19 +21,20 @@ export class ShellGitClient implements GitClient {
     const result = execSync(cmd, {
       cwd: this.dir,
       encoding: 'utf-8',
-      stdio: options.stdio || 'pipe'
+      stdio: options.stdio || 'pipe',
+      env: {
+        ...process.env,
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'safe.directory',
+        GIT_CONFIG_VALUE_0: '*',
+        GIT_CONFIG_PARAMETERS: "'safe.directory=*'"
+      }
     });
     return (result || '').toString().trim();
   }
 
   getTopLevel(): string {
-    // Note: The original code used 'git rev-parse --show-toplevel' without the '-c safe.directory=*' prefix.
-    // For compatibility and consistency, we can construct the exact command.
-    const result = execSync('git rev-parse --show-toplevel', {
-      cwd: this.dir,
-      encoding: 'utf-8'
-    });
-    return (result || '').toString().trim();
+    return this.exec(['rev-parse', '--show-toplevel']);
   }
 
   add(pattern: string = '.'): void {

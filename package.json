@@ -8,6 +8,8 @@
     "afk-coder-daemon": "bin/afk-coder-daemon"
   },
   "scripts": {
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
     "build": "tsc",
     "start": "node dist/src/cli/index.js",
     "daemon": "node dist/src/daemon/index.js",
