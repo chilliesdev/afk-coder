@@ -677,7 +677,10 @@ configCmd
     }
   });
 
-if (require.main === module) {
+if (
+  require.main === module ||
+  (require.main && require.main.filename.replace(/\\/g, '/').endsWith('bin/afk'))
+) {
   program.parse();
 }
 

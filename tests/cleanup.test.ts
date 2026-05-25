@@ -11,20 +11,29 @@ describe('Cleanup', () => {
 
   afterEach(() => {
     stdoutWriteSpy.mockRestore();
-    // @ts-ignore
-    process.stdout.isTTY = isTTYOriginal;
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: isTTYOriginal,
+      configurable: true,
+      writable: true
+    });
   });
 
   it('should restore cursor if isTTY is true', () => {
-    // @ts-ignore
-    process.stdout.isTTY = true;
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+      writable: true
+    });
     cleanup();
     expect(stdoutWriteSpy).toHaveBeenCalledWith('\u001B[?25h');
   });
 
   it('should not restore cursor if isTTY is false', () => {
-    // @ts-ignore
-    process.stdout.isTTY = false;
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: false,
+      configurable: true,
+      writable: true
+    });
     cleanup();
     expect(stdoutWriteSpy).not.toHaveBeenCalled();
   });

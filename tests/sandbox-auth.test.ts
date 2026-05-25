@@ -29,7 +29,7 @@ describe('Sandbox Authentication', () => {
 
     const sandbox = new DockerRuntime();
     await expect(sandbox.start('/test/dir')).rejects.toThrow(
-      'Authentication required. Please run "afk-coder login" or set the GEMINI_API_KEY environment variable.'
+      'Authentication required. Please run "afk login" or set the GEMINI_API_KEY environment variable.'
     );
   });
 });

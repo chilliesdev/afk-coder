@@ -23,7 +23,7 @@ describe('Config CLI', () => {
   const runCli = (args: string, env: any = {}) => {
     try {
       // Set HOME to our temp dir so it uses a fresh config
-      return execSync(`${TS_NODE_BIN} ${BIN_PATH} ${args}`, {
+      const output = execSync(`${TS_NODE_BIN} ${BIN_PATH} ${args}`, {
         encoding: 'utf-8',
         timeout: 20000,
         env: { 
@@ -34,8 +34,10 @@ describe('Config CLI', () => {
           ...env 
         }
       });
+      return output.replace(/\u001b\[[0-9;]*m/g, '');
     } catch (error: any) {
-      return error.stdout + error.stderr;
+      const output = (error.stdout || '') + (error.stderr || '');
+      return output.replace(/\u001b\[[0-9;]*m/g, '');
     }
   };
 
