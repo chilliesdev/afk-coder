@@ -1,10 +1,10 @@
-# Gemini AFK Coding Daemon (`afk-coder`)
+# Gemini AFK Coding Daemon (`afk`)
 
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![TypeScript](https://img.shields.io/badge/Language-TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![Platform: Ubuntu](https://img.shields.io/badge/Platform-Ubuntu-orange.svg)](https://ubuntu.com/)
 
-An autonomous, background-managed coding assistant for Ubuntu servers. `afk-coder` leverages the power of Gemini 2.5 Pro via the Gemini CLI to execute software development tasks continuously in a secure, isolated sandbox.
+An autonomous, background-managed coding assistant for Ubuntu servers. `afk` leverages the power of Gemini 2.5 Pro via the Gemini CLI to execute software development tasks continuously in a secure, isolated sandbox.
 
 ## 🚀 Overview
 
@@ -22,7 +22,7 @@ The **Gemini AFK Coding Daemon** is designed for "fire-and-forget" task executio
 
 The system consists of three main components:
 
-1.  **CLI Client (`afk-coder`):** The user interface for managing workflows, viewing logs, and initializing projects.
+1.  **CLI Client (`afk`):** The user interface for managing workflows, viewing logs, and initializing projects.
 2.  **Service Daemon (`afk-coder-daemon`):** A `systemd`-managed background process that handles task queuing, Google OAuth 2.0 authentication, and sandbox management.
 3.  **Execution Sandbox:** Ephemeral Docker containers where the Gemini CLI executes code modifications, installations, and tests with full internal root access.
 
@@ -108,18 +108,18 @@ Create a `PRD.md` in your project directory, then generate a `tasks.md`:
 
 ```bash
 # Runs in the current directory, looking for PRD.md
-afk-coder init
+afk init
 
 # Or specify a custom directory and overwrite existing tasks.md
-afk-coder init --dir /path/to/project --prd custom-PRD.md --force
+afk init --dir /path/to/project --prd custom-PRD.md --force
 ```
-**Note:** The `init` command requires authentication. Please run `afk-coder login` first or set the `GEMINI_API_KEY` environment variable.
+**Note:** The `init` command requires authentication. Please run `afk login` first or set the `GEMINI_API_KEY` environment variable.
 
 ### 2. Authentication
 Log in to your Google account to enable Gemini Pro access. Ensure your OAuth credentials are set via the `.env` file or configuration file before logging in:
 
 ```bash
-afk-coder login
+afk login
 ```
 
 **Remote/Headless Servers:**
@@ -134,29 +134,29 @@ If you are running the CLI on a remote server without a web browser, the local c
 ### 3. Start a Workflow
 Kick off the autonomous coding loop. If `--dir` is not specified, it will run in the current directory.
 ```bash
-afk-coder start my-feature --dir /path/to/project
+afk start my-feature --dir /path/to/project
 ```
 To run the workflow in an isolated git worktree, use the `-w` or `--worktree` flag. If `--dir` and `--branch` are not provided, they will be automatically generated with a random suffix based on the workflow name to avoid conflicts:
 ```bash
-afk-coder start my-feature -w
+afk start my-feature -w
 # This creates a worktree directory like ./my-feature-5a1b3c and a branch named my-feature-5a1b3c
 ```
 You can also explicitly specify the branch and directory if desired:
 ```bash
-afk-coder start my-feature -w --branch my-feature-branch --dir /path/to/worktree
+afk start my-feature -w --branch my-feature-branch --dir /path/to/worktree
 ```
 To specify a different agent adapter (e.g., `aider`), use the `--agent` option:
 ```bash
-afk-coder start my-feature --agent aider
+afk start my-feature --agent aider
 ```
 
 ### 4. Monitor Progress
 Check the status of running workflows or view live logs:
 
 ```bash
-afk-coder list
-afk-coder status my-feature
-afk-coder logs my-feature -f
+afk list
+afk status my-feature
+afk logs my-feature -f
 ```
 
 ---

@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/src/cli/index.js",
   "bin": {
-    "afk-coder": "bin/afk-coder",
+    "afk": "bin/afk",
     "afk-coder-daemon": "bin/afk-coder-daemon"
   },
   "scripts": {

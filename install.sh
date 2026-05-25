@@ -32,9 +32,9 @@ sudo cp -r node_modules /usr/local/lib/afk-coder/
 sudo cp package.json /usr/local/lib/afk-coder/
 
 # Install binaries
-sudo cp bin/afk-coder /usr/local/bin/afk-coder
+sudo cp bin/afk /usr/local/bin/afk
 sudo cp bin/afk-coder-daemon /usr/local/bin/afk-coder-daemon
-sudo chmod +x /usr/local/bin/afk-coder
+sudo chmod +x /usr/local/bin/afk
 sudo chmod +x /usr/local/bin/afk-coder-daemon
 
 # Install systemd service with user templating

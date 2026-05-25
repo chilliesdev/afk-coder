@@ -20,6 +20,6 @@ for (const p of possiblePaths) {
 }
 
 if (!found) {
-  console.error("Could not find afk-coder distribution files.");
+  console.error("Could not find afk distribution files.");
   process.exit(1);
 }

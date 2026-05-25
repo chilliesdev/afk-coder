@@ -29,7 +29,7 @@ export class DockerRuntime implements ExecutionRuntime {
     const hasTokens = !!(tokens && tokens.access_token);
 
     if (!hasApiKey && !hasTokens) {
-      throw new Error('Authentication required. Please run "afk-coder login" or set the GEMINI_API_KEY environment variable.');
+      throw new Error('Authentication required. Please run "afk login" or set the GEMINI_API_KEY environment variable.');
     }
     
     const env: string[] = [];

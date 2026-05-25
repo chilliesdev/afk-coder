@@ -14,7 +14,7 @@ const validateWorkflowDir = validator.validateWorkflowDir.bind(validator);
 const program = new Command();
 
 program
-  .name('afk-coder')
+  .name('afk')
   .description('Gemini AFK Coding Daemon CLI')
   .version('1.0.0');
 
@@ -76,7 +76,7 @@ program
 
     if (!clientId || !clientSecret) {
       console.error('Error: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set via environment variables or in config.json.');
-      console.log('Example: GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy afk-coder login');
+      console.log('Example: GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy afk login');
       return;
     }
 
@@ -349,7 +349,7 @@ program
       }
 
       if (!response.data || response.data.length === 0) {
-        console.log('No active workflows found. Use "afk-coder start <workflow_name>" to start one.');
+        console.log('No active workflows found. Use "afk start <workflow_name>" to start one.');
         return;
       }
       
