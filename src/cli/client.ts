@@ -1,5 +1,5 @@
 import * as net from 'node:net';
-import { DaemonResponse, MilestoneEvent } from '../common/types';
+import { DaemonResponse, MilestoneEvent, MILESTONE_TYPE } from '../common/types';
 import { ConfigManager } from '../common/config';
 
 export class DaemonClient {
@@ -37,8 +37,10 @@ export class DaemonClient {
           if (line.trim()) {
             try {
               const parsed = JSON.parse(line);
-              if (parsed.type === 'milestone' && onMilestone) {
-                onMilestone(parsed);
+              if (parsed.type === MILESTONE_TYPE) {
+                if (onMilestone) {
+                  onMilestone(parsed);
+                }
               } else {
                 finalResponse = parsed;
               }
@@ -54,8 +56,10 @@ export class DaemonClient {
         if (buffer.trim()) {
           try {
             const parsed = JSON.parse(buffer);
-            if (parsed.type === 'milestone' && onMilestone) {
-              onMilestone(parsed);
+            if (parsed.type === MILESTONE_TYPE) {
+              if (onMilestone) {
+                onMilestone(parsed);
+              }
             } else {
               finalResponse = parsed;
             }

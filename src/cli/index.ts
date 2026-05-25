@@ -4,6 +4,11 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { ShellGitClient } from '../common/git';
 import { TaskValidator } from '../common/validation';
+import { Spinner } from './ui';
+import { MILESTONE_STATUS } from '../common/types';
+import { registerCleanupHandlers } from './cleanup';
+
+registerCleanupHandlers();
 
 const client = new DaemonClient();
 const validator = new TaskValidator();
@@ -11,7 +16,8 @@ const validator = new TaskValidator();
 const sendCommand = client.sendCommand.bind(client);
 const validateWorkflowDir = validator.validateWorkflowDir.bind(validator);
 
-const program = new Command();
+export const program = new Command();
+
 
 program
   .name('afk')
@@ -25,28 +31,49 @@ program
   .option('--prd <filename>', 'Name of the PRD file', 'PRD.md')
   .option('--force', 'Overwrite existing tasks.md')
   .action(async (options) => {
+    const spinner = new Spinner('Connecting to daemon...');
+    spinner.start();
     try {
       const dir = path.resolve(options.dir);
       const { CONFIG_DIR } = await import('../common/config');
 
-      console.log(`Generating tasks.md from ${options.prd} via Gemini AFK Daemon...`);
       const response = await sendCommand('init', {
         dir,
         prd: options.prd,
         force: options.force,
         configDir: CONFIG_DIR
+      }, (milestone) => {
+        switch (milestone.status) {
+          case MILESTONE_STATUS.STARTING:
+            spinner.start(milestone.message);
+            break;
+          case MILESTONE_STATUS.INFO:
+            spinner.update(milestone.message);
+            break;
+          case MILESTONE_STATUS.COMPLETED:
+            spinner.stop(milestone.message, true);
+            break;
+          case MILESTONE_STATUS.FAILED:
+            spinner.stop(milestone.message, false);
+            break;
+        }
       });
 
       if (!response.success) {
-        console.error(`Failed to generate tasks.md: ${response.message}`);
+        // If spinner didn't stop via milestone (e.g. error before first milestone)
+        spinner.stop(`Failed: ${response.message}`, false);
         if (response.data) {
           console.log('Logs:', response.data);
         }
         return;
+      } else {
+        // Ensure the final success message is shown even if the last milestone was missed
+        spinner.stop(response.data || 'Successfully generated tasks.md', true);
       }
-      console.log(response.data || 'Successfully generated tasks.md');
     } catch (error: any) {
-      console.error('Failed to generate tasks.md:', error.message);
+      spinner.stop(`Error: ${error.message}`, false);
+    } finally {
+      spinner.stop();
     }
   });
 
@@ -650,4 +677,8 @@ configCmd
     }
   });
 
-program.parse();
+if (require.main === module) {
+  program.parse();
+}
+
+

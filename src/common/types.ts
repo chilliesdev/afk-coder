@@ -65,10 +65,19 @@ export interface Workflow {
   qaCycles?: number;
 }
 
-export type MilestoneStatus = 'starting' | 'completed' | 'failed' | 'info';
+export const MILESTONE_TYPE = 'milestone';
+
+export const MILESTONE_STATUS = {
+  STARTING: 'starting',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  INFO: 'info',
+} as const;
+
+export type MilestoneStatus = typeof MILESTONE_STATUS[keyof typeof MILESTONE_STATUS];
 
 export interface MilestoneEvent {
-  type: 'milestone';
+  type: typeof MILESTONE_TYPE;
   status: MilestoneStatus;
   message: string;
   timestamp: string;

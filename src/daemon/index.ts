@@ -71,16 +71,9 @@ const server = net.createServer((socket) => {
 
       switch (request.command) {
         case 'init': {
-          const agent = agentFactory(request.args.agent);
-          const initResult = await agent.generateTasks(
-            request.args.dir,
-            request.args.prd,
-            request.args.force,
-            request.args.configDir,
-            (milestone) => {
-              socket.write(JSON.stringify(milestone) + '\n');
-            }
-          );
+          const initResult = await workflowManager.init(request.args, (milestone) => {
+            socket.write(JSON.stringify(milestone) + '\n');
+          });
           response = { success: initResult.success, message: initResult.error, data: initResult.logs };
           break;
         }
