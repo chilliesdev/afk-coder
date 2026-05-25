@@ -13,3 +13,5 @@
 - [x] Implement discrete milestones (STARTING/COMPLETED) in Agent.generateTasks for task generation to show a checkmark [PRD: User Story 5]
 - [x] Add milestone reporting for the task validation step in Agent.generateTasks [PRD: User Story 6]
 - [x] Fix duplicate spinner completion messages and ensure correct symbols on failure in CLI `init` command [PRD: User Story 8]
+- [x] Implement COMPLETED milestone for task generation in Agent.generateTasks to show a checkmark [PRD: User Story 5]
+- [x] Ensure final confirmation message 'Successfully generated tasks.md' is shown with a checkmark in CLI init command [PRD: User Story 7]

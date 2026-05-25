@@ -66,6 +66,9 @@ program
           console.log('Logs:', response.data);
         }
         return;
+      } else {
+        // Ensure the final success message is shown even if the last milestone was missed
+        spinner.stop(response.data || 'Successfully generated tasks.md', true);
       }
     } catch (error: any) {
       spinner.stop(`Error: ${error.message}`, false);

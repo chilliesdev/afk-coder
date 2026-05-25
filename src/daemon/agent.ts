@@ -301,6 +301,8 @@ export class Agent {
         fs.writeFileSync(tasksPath, content);
       }
 
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, 'Analyzing PRD and generating tasks...');
+
       this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, 'Validating generated tasks...');
       try {
         const validator = new TaskValidator();
@@ -311,6 +313,7 @@ export class Agent {
         return { success: false, error: `Validation failed: ${error.message}`, logs: result.logs };
       }
 
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, 'Finalizing task generation...');
       this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, 'Successfully generated tasks.md');
       return { success: true, logs: 'Successfully generated tasks.md' };
     } catch (error: any) {

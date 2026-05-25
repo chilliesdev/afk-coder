@@ -92,6 +92,11 @@ describe('Agent', () => {
       }));
 
       expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.COMPLETED,
+        message: 'Analyzing PRD and generating tasks...'
+      }));
+
+      expect(milestones).toContainEqual(expect.objectContaining({
         status: MILESTONE_STATUS.STARTING,
         message: 'Validating generated tasks...'
       }));
@@ -99,6 +104,11 @@ describe('Agent', () => {
       expect(milestones).toContainEqual(expect.objectContaining({
         status: MILESTONE_STATUS.COMPLETED,
         message: 'Tasks validated'
+      }));
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.STARTING,
+        message: 'Finalizing task generation...'
       }));
 
       expect(milestones).toContainEqual(expect.objectContaining({
