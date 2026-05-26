@@ -176,6 +176,7 @@ program
     p { margin-bottom: 1.5rem; color: #4b5563; }
     .btn { display: inline-block; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; text-decoration: none; }
     .btn:hover { background-color: #2563eb; }
+    .btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
   </style>
 </head>
 <body>
