@@ -10,3 +10,4 @@
 - [x] Integrate the log formatter into the `afk logs` command stream processing.
 - [x] Create unit tests for the log formatter covering various log formats and metadata scenarios.
 - [x] Create integration tests for `afk logs` command to verify flags and TTY behavior.
+- [x] Automatically disable ANSI color codes when stdout is not a TTY [PRD: Requirement 11]

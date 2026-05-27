@@ -62,10 +62,16 @@ describe('LogFormatter', () => {
   });
 
   it('should colorize levels if requested', () => {
-    const colorFormatter = new LogFormatter({ color: true });
-    const line = JSON.stringify({ level: 'error', message: 'fail' });
-    const result = colorFormatter.format(line);
-    // [ERROR] in red is \u001B[31m[ERROR]\u001B[0m
-    expect(result).toContain('\u001B[31m[ERROR]\u001B[0m');
+    const originalIsTTY = process.stdout.isTTY;
+    (process.stdout as any).isTTY = true;
+    try {
+      const colorFormatter = new LogFormatter({ color: true });
+      const line = JSON.stringify({ level: 'error', message: 'fail' });
+      const result = colorFormatter.format(line);
+      // [ERROR] in red is \u001B[31m[ERROR]\u001B[0m
+      expect(result).toContain('\u001B[31m[ERROR]\u001B[0m');
+    } finally {
+      (process.stdout as any).isTTY = originalIsTTY;
+    }
   });
 });

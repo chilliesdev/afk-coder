@@ -404,7 +404,8 @@ program
 program
   .command('status <workflow_name>')
   .description('Show detailed status of a workflow')
-  .action(async (workflowName) => {
+  .option('--no-color', 'Disable color output')
+  .action(async (workflowName, options) => {
     try {
       const response = await sendCommand('status', { name: workflowName });
       if (!response.success) {
@@ -419,13 +420,15 @@ program
       const rs = s % 60;
       const uptimeStr = `${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${rs}s`;
 
+      const useColor = options.color !== false && process.stdout.isTTY;
+
       const colors = {
-        reset: '\u001B[0m',
-        bold: '\u001B[1m',
-        green: '\u001B[32m',
-        yellow: '\u001B[33m',
-        red: '\u001B[31m',
-        cyan: '\u001B[36m',
+        reset: useColor ? '\u001B[0m' : '',
+        bold: useColor ? '\u001B[1m' : '',
+        green: useColor ? '\u001B[32m' : '',
+        yellow: useColor ? '\u001B[33m' : '',
+        red: useColor ? '\u001B[31m' : '',
+        cyan: useColor ? '\u001B[36m' : '',
       };
 
       let statusColor = colors.reset;

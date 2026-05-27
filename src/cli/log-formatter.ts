@@ -18,7 +18,7 @@ export class LogFormatter {
   private readonly useColor: boolean;
 
   constructor(options: FormatOptions = {}) {
-    this.useColor = options.color ?? process.stdout.isTTY;
+    this.useColor = options.color !== false && process.stdout.isTTY;
   }
 
   private colors = {
