@@ -7,6 +7,7 @@ import { TaskValidator } from '../common/validation';
 import { Spinner } from './ui';
 import { MILESTONE_STATUS } from '../common/types';
 import { registerCleanupHandlers } from './cleanup';
+import { LogFormatter } from './log-formatter';
 
 registerCleanupHandlers();
 
@@ -506,8 +507,27 @@ program
   .description('View workflow logs')
   .option('-f, --follow', 'Stream logs')
   .option('--tail <lines>', 'Number of lines to show')
+  .option('--json', 'Show logs in raw JSON format')
+  .option('--raw', 'Show logs as they are stored (no formatting)')
+  .option('--no-color', 'Disable color output')
   .action(async (workflowName, options) => {
     try {
+      const formatter = new LogFormatter({
+        color: options.color !== false,
+        json: options.json,
+        raw: options.raw
+      });
+
+      const printFormattedLogs = (content: string) => {
+        if (!content) return;
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (i === lines.length - 1 && !line) break;
+          process.stdout.write(formatter.format(line, options) + '\n');
+        }
+      };
+
       if (options.follow) {
         let currentOffset: number | undefined;
         console.log(`Following logs for ${workflowName}... (Ctrl+C to stop)`);
@@ -519,7 +539,7 @@ program
         });
 
         if (initialResponse.success) {
-          process.stdout.write(initialResponse.data.content);
+          printFormattedLogs(initialResponse.data.content);
           currentOffset = initialResponse.data.nextOffset;
         }
 
@@ -530,7 +550,7 @@ program
           });
           if (response.success) {
             if (response.data.content) {
-              process.stdout.write(response.data.content);
+              printFormattedLogs(response.data.content);
             }
             currentOffset = response.data.nextOffset;
           }
@@ -542,7 +562,7 @@ program
           console.error(`Failed to get logs: ${response.message}`);
           return;
         }
-        console.log(response.data.content);
+        printFormattedLogs(response.data.content);
       }
     } catch (error: any) {
       console.error(error.message);
