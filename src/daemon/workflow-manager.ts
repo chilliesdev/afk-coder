@@ -2,7 +2,6 @@ import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent, MILESTONE_STATUS, MI
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitClient, ShellGitClient } from '../common/git';
-import { ConfigManager } from '../common/config';
 
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
@@ -163,7 +162,7 @@ export class WorkflowManager {
     await executor.kill();
   }
 
-  async removeWorkflow(name: string, onMilestone?: (milestone: MilestoneEvent) => void) {
+  async removeWorkflow(name: string, onMilestone?: (milestone: MilestoneEvent) => void, deleteDir?: boolean) {
     const executor = this.workflows.get(name);
     if (!executor) {
       this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Workflow ${name} not found`);
@@ -227,12 +226,33 @@ export class WorkflowManager {
 
     if (executor.isWorktree && executor.sourceRepo) {
       try {
-        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting git worktree...');
-        const sourceGit = this.gitClientFactory(executor.sourceRepo);
-        sourceGit.removeWorktree(executor.dir);
+        if (deleteDir) {
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting git worktree...');
+          const sourceGit = this.gitClientFactory(executor.sourceRepo);
+          sourceGit.removeWorktree(executor.dir);
+        } else {
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Untracking git worktree...');
+          const gitPointerPath = path.join(executor.dir, '.git');
+          if (fs.existsSync(gitPointerPath)) {
+            fs.rmSync(gitPointerPath, { force: true });
+          }
+          const sourceGit = this.gitClientFactory(executor.sourceRepo);
+          sourceGit.pruneWorktrees();
+        }
       } catch (error: any) {
-        logger?.error(`Failed to remove worktree: ${error.message}`);
-        this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to delete git worktree: ${error.message}`);
+        logger?.error(`Failed to remove/untrack worktree: ${error.message}`);
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to remove/untrack git worktree: ${error.message}`);
+        throw error;
+      }
+    } else if (!executor.isWorktree && deleteDir) {
+      try {
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting workflow directory...');
+        if (fs.existsSync(executor.dir)) {
+          fs.rmSync(executor.dir, { recursive: true, force: true });
+        }
+      } catch (error: any) {
+        logger?.error(`Failed to delete directory: ${error.message}`);
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to delete directory: ${error.message}`);
         throw error;
       }
     }

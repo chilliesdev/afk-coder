@@ -111,7 +111,7 @@ const server = net.createServer((socket) => {
           const wf = workflowManager.getWorkflow(request.args.name);
           const dir = wf?.dir;
           const isWorktree = wf?.isWorktree;
-          await workflowManager.removeWorkflow(request.args.name);
+          await workflowManager.removeWorkflow(request.args.name, undefined, request.args.deleteDir);
           response = { success: true, message: `Removed ${request.args.name}`, data: { dir, isWorktree } };
           break;
         }

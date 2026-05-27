@@ -333,7 +333,7 @@ describe('WorkflowManager', () => {
       // Clear mock so we can just check remove
       (execSync as jest.Mock).mockClear();
 
-      await workflowManager.removeWorkflow('wt-test3');
+      await workflowManager.removeWorkflow('wt-test3', undefined, true);
 
       expect(execSync).toHaveBeenCalledWith(
         `git -c safe.directory=* worktree remove --force "${testDir}"`,
@@ -551,7 +551,7 @@ describe('WorkflowManager', () => {
       });
 
       const milestones: any[] = [];
-      await workflowManager.removeWorkflow('wt-test-remove-commit', (m) => milestones.push(m));
+      await workflowManager.removeWorkflow('wt-test-remove-commit', (m) => milestones.push(m), true);
 
       expect(milestones).toContainEqual(
         expect.objectContaining({ status: 'starting' })
@@ -638,7 +638,7 @@ describe('WorkflowManager', () => {
       });
 
       const milestones: any[] = [];
-      await workflowManager.removeWorkflow('wt-test-remove-no-commit', (m) => milestones.push(m));
+      await workflowManager.removeWorkflow('wt-test-remove-no-commit', (m) => milestones.push(m), true);
 
       expect(milestones).toContainEqual(
         expect.objectContaining({ status: 'starting' })
@@ -710,7 +710,7 @@ describe('WorkflowManager', () => {
 
       (execSync as jest.Mock).mockClear();
 
-      await workflowManager.removeWorkflow('wt-test-overwrite');
+      await workflowManager.removeWorkflow('wt-test-overwrite', undefined, true);
 
       // Verify that the destination files were overwritten with new content
       const archivedTasksPath = path.join(destDir, 'tasks.md');
@@ -749,7 +749,7 @@ describe('WorkflowManager', () => {
       (execSync as jest.Mock).mockClear();
 
       // Verify it does not throw
-      await expect(workflowManager.removeWorkflow('wt-test-missing-files')).resolves.not.toThrow();
+      await expect(workflowManager.removeWorkflow('wt-test-missing-files', undefined, true)).resolves.not.toThrow();
 
       // Verify archiving directory is empty or doesn't have the files
       const destDir = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-missing-files');
@@ -789,6 +789,91 @@ describe('WorkflowManager', () => {
 
       // Assert no git commands were executed
       expect(execSync).not.toHaveBeenCalled();
+    });
+
+    it('should untrack but preserve worktree directory when deleteDir is false', async () => {
+      await resetBoard('- [ ] Task 1');
+
+      (execSync as jest.Mock).mockImplementationOnce(() => Buffer.from(''));
+      await workflowManager.startWorkflow('wt-test-untrack', testDir, {
+        isWorktree: true,
+        sourceRepo: '/mock/repo',
+        branch: 'workflow/wt-test-untrack'
+      });
+
+      const executor = (workflowManager as any).workflows.get('wt-test-untrack');
+      executor.status = 'Done';
+
+      (execSync as jest.Mock).mockClear();
+      
+      // Write dummy .git pointer file
+      const gitPointerPath = path.join(testDir, '.git');
+      fs.writeFileSync(gitPointerPath, 'gitdir: ...');
+
+      await workflowManager.removeWorkflow('wt-test-untrack', undefined, false);
+
+      // Verify .git file removal and prune worktrees called
+      expect(fs.existsSync(gitPointerPath)).toBe(false);
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* worktree prune',
+        expect.objectContaining({ cwd: '/mock/repo' })
+      );
+      expect(execSync).not.toHaveBeenCalledWith(
+        expect.stringContaining('worktree remove'),
+        expect.anything()
+      );
+    });
+
+    it('should delete standard directory when deleteDir is true', async () => {
+      await resetBoard('- [ ] Task 1');
+
+      // Create a dummy workflow directory
+      const standardDir = path.resolve('./test-standard-workflow');
+      if (fs.existsSync(standardDir)) {
+        fs.rmSync(standardDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(standardDir);
+      fs.writeFileSync(path.join(standardDir, 'PRD.md'), '# PRD');
+      fs.writeFileSync(path.join(standardDir, 'tasks.md'), '- [ ] Task 1');
+
+      await workflowManager.startWorkflow('standard-delete-test', standardDir);
+
+      const executor = (workflowManager as any).workflows.get('standard-delete-test');
+      executor.status = 'Done';
+
+      expect(fs.existsSync(standardDir)).toBe(true);
+
+      await workflowManager.removeWorkflow('standard-delete-test', undefined, true);
+
+      // Verify directory was deleted
+      expect(fs.existsSync(standardDir)).toBe(false);
+    });
+
+    it('should NOT delete standard directory when deleteDir is false', async () => {
+      await resetBoard('- [ ] Task 1');
+
+      const standardDir = path.resolve('./test-standard-workflow-keep');
+      if (fs.existsSync(standardDir)) {
+        fs.rmSync(standardDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(standardDir);
+      fs.writeFileSync(path.join(standardDir, 'PRD.md'), '# PRD');
+      fs.writeFileSync(path.join(standardDir, 'tasks.md'), '- [ ] Task 1');
+
+      await workflowManager.startWorkflow('standard-keep-test', standardDir);
+
+      const executor = (workflowManager as any).workflows.get('standard-keep-test');
+      executor.status = 'Done';
+
+      expect(fs.existsSync(standardDir)).toBe(true);
+
+      await workflowManager.removeWorkflow('standard-keep-test', undefined, false);
+
+      // Verify directory was NOT deleted
+      expect(fs.existsSync(standardDir)).toBe(true);
+
+      // Cleanup
+      fs.rmSync(standardDir, { recursive: true, force: true });
     });
   });
 

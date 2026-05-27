@@ -172,7 +172,7 @@ afk logs my-feature -f
 | `status <name>` | Shows detailed status, phase, and QA cycles of a workflow. |
 | `logs <name> [-f\|--follow] [--tail <lines>]` | Streams or outputs workflow execution logs. Use `-f` or `--follow` to stream logs. |
 | `kill <name>` | Terminates a running workflow. |
-| `remove <name>` | Cleans up a finished or failed workflow from the daemon. |
+| `remove <name> [-d\|--delete-dir]` | Cleans up a finished or failed workflow from the daemon. By default, it preserves the directory (untracking/pruning the worktree in git). If `-d` or `--delete-dir` is specified, it deletes the directory from disk (asking for confirmation for non-worktree setups). |
 
 ### Daemon CLI Options (`afk-coder-daemon`)
 When running the daemon binary directly (e.g., for development or debugging):
