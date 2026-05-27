@@ -174,13 +174,14 @@ program
     main { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 90%; }
     h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #111827; }
     p { margin-bottom: 1.5rem; color: #4b5563; }
-    .btn { display: inline-block; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; text-decoration: none; }
+    .btn { display: inline-block; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; text-decoration: none; transition: background-color 0.2s; }
     .btn:hover { background-color: #2563eb; }
+    .btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>${title}</h1>
+  <main aria-labelledby="page-title">
+    <h1 id="page-title">${title}</h1>
     <p>${message}</p>
     ${script}
   </main>
