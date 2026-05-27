@@ -1,46 +1,49 @@
-# PRD: CLI Init Command Progress Feedback
+# PRD: CLI Format Log Output for Humans
 **Triage Labels**: `ready-for-agent`
 
 ## Problem Statement
 
-When running the `init` command, the user experiences a complete lack of feedback once the initial generation message (`Generating tasks.md from PRD.md via Gemini AFK Daemon...`) is printed. The task generation process takes several seconds (usually between 10 to 30 seconds depending on sandbox startup and Gemini generation speed). To the user, it feels as if the command has frozen or hung, creating a poor user experience.
+When running the `afk logs <workflow_name>` command, the CLI dumps raw Winston JSON log blocks (e.g., `{"level":"info","message":"Workflow executor started","timestamp":"..."}`) directly to the console. This raw format is difficult for human operators to read and parse visually, making debugging and monitoring workflows inefficient.
 
 ## Solution
 
-Provide a step-by-step progress feedback mechanism in the CLI during the `init` command execution. We will stream key progress milestones from the daemon to the CLI client over the control socket using a Newline-Delimited JSON (NDJSON) stream. The CLI will display a clean, lightweight terminal spinner for each step, checking them off when done.
+Update the CLI's `logs` command to parse these JSON lines and format them into a structured, color-coded, and highly readable output. Standard ANSI escape codes will color-code levels (green for info, yellow for warn, red for error, and cyan for timestamps). We will also introduce `--json` and `--raw` flags to allow users to bypass formatting when piping logs to monitoring scripts, and automatically disable color formatting when output is redirected.
 
 ## User Stories
 
-1. As an operator running `afk-coder init`, I want to see immediate feedback that the client has connected to the daemon, so that I know the request was successfully transmitted.
-2. As an operator running `afk-coder init`, I want to see a spinner indicating when the execution runtime (Docker sandbox) is starting up, so that I understand why the command hasn't immediately finished.
-3. As an operator, I want the Docker startup step to turn into a green checkmark once complete, so that I know the sandbox environment is ready.
-4. As an operator, I want to see a spinner indicating that the Gemini AI model is currently reading the PRD and generating the task checklist, so that I am aware the AI is actively processing my requirement document.
-5. As an operator, I want the task generation step to show a success state once Gemini has finished generating the tasks, so that I can track the progress of the workflow.
-6. As an operator, I want to see a spinner indicating that the generated tasks are being validated, so that I know the daemon is verifying the task formats before saving.
-7. As an operator, I want to see a final confirmation message and a clean checkmark when the `tasks.md` file is successfully written, so that I know the command completed successfully.
-8. As an operator, if the sandbox fails to start, I want the active step to show a failure cross, and the CLI to output the appropriate error details, so that I can troubleshoot the issue.
-9. As an operator, if the Gemini generation fails, I want the CLI to report the failure step and output the logs, so that I can see what went wrong inside the container.
-10. As a developer modifying or running other commands (like `start`, `status`, `logs`), I want the socket connection logic to remain completely backward-compatible, so that existing daemon workflows are not broken.
+1. As an operator running `afk logs <workflow_name>`, I want to see log timestamps formatted cleanly as `[YYYY-MM-DD HH:mm:ss]`, so that I can easily tell when events occurred.
+2. As an operator running `afk logs <workflow_name>`, I want the timestamps to be styled in cyan, so that they are visually distinguished from the rest of the log message.
+3. As an operator running `afk logs <workflow_name>`, I want the log levels (e.g., `INFO`, `WARN`, `ERROR`) to be displayed in color-coded brackets, so that I can instantly identify critical warnings or errors.
+4. As an operator running `afk logs <workflow_name>`, I want the `INFO` level to be green, so that it denotes a normal operating state.
+5. As an operator running `afk logs <workflow_name>`, I want the `WARN` or `WARNING` level to be yellow, so that it alerts me to potential non-fatal issues.
+6. As an operator running `afk logs <workflow_name>`, I want the `ERROR` level to be red, so that it highlights failures that need my immediate attention.
+7. As an operator running `afk logs <workflow_name>`, I want any metadata other than the level, timestamp, message, and workflow name to be printed in a readable format, so that I don't lose context.
+8. As an operator running `afk logs <workflow_name>`, I want small metadata fields (like `{ exitCode: 0 }`) to be printed inline in a neutral color (gray/reset), so that it keeps the log line concise.
+9. As an operator running `afk logs <workflow_name>`, I want large or multiline metadata fields (such as agent outputs or error stacks) to be printed on new lines with proper indentation, so that the main log sequence remains easy to follow.
+10. As an operator running `afk logs <workflow_name>`, I want any log lines that are not valid JSON to be printed as-is, so that I do not lose raw daemon logs or banners.
+11. As an automated script piping logs (e.g., `afk logs my-workflow > output.log`), I want the CLI to automatically disable ANSI color codes when stdout is not a TTY, so that the log file is not cluttered with escape sequences.
+12. As a DevOps engineer running log analysis tools, I want to use `afk logs <workflow_name> --raw` or `afk logs <workflow_name> --json` to receive the original JSON lines without any formatting, so that my log parsing scripts continue to function without modification.
 
 ## Implementation Decisions
 
-- **Daemon-to-CLI Streaming Protocol**: Use Newline-Delimited JSON (NDJSON) over the existing UNIX domain socket. The daemon will send intermediate progress events as single-line JSON objects before writing the final command response.
-- **Daemon Milestone Reporting**: The `init` handler in the daemon and the `Agent.generateTasks()` method will be updated to accept an optional callback to publish milestone progress.
-- **CLI Connection Upgrades**: The CLI client's `sendCommand` utility will be modified to support a callback that streams status events by chunking the incoming data stream on newline characters.
-- **Terminal UI Rendering**: The CLI will use a lightweight, zero-dependency spinner to show a clean spinner animation for the active step. When a milestone changes, the current spinner line is checked off with a green checkmark (or red cross on failure) and the next step spinner begins.
+- **CLI Log Formatting Layer**: Add a helper formatting function in the CLI module to parse, clean, and colorize the stream of JSON log lines.
+- **Redundant Key Filtering**: Filter out `timestamp`, `level`, `message`, and `workflow` from the printed metadata object to avoid redundancy.
+- **ANSI Color Support & Detection**: Define a basic terminal coloring map. Detect `process.stdout.isTTY` to automatically toggle colorization on/off.
+- **CLI Command Options**: Update the `logs` command definition in `src/cli/index.ts` to accept `--raw` and `--json` flags.
+- **Parsing Fallback**: Gracefully handle JSON parsing errors on a per-line basis, falling back to outputting the line as-is.
 
 ## Testing Decisions
 
-- **External Behavior Testing**: The tests should verify that the CLI correctly renders status changes, and the client properly parses multiple newline-delimited status updates followed by a final response.
-- **Target Modules**: `DaemonClient` and the `init` command handler in `src/cli/index.ts`.
-- **Prior Art**: We have existing tests for the CLI client socket connection in `tests/cli-connection.test.ts` and `tests/daemon-socket.test.ts`. We will add tests simulating socket streams containing newline-separated status events.
+- **Unit/Integration Tests**: Write unit/integration tests verifying the formatting helper under various conditions (standard JSON log, JSON log with metadata, multiline metadata, invalid JSON, and TTY/non-TTY simulation).
+- **Target Modules**: The log formatter function in `src/cli/index.ts` (or a helper module in `src/cli/`).
+- **Prior Art**: We have existing CLI tests in `tests/cli-connection.test.ts`.
 
 ## Out of Scope
 
-- Interactive terminal dashboard overlays or fullscreen TUI.
-- Adding complex node-module terminal libraries to keep dependencies minimal.
-- Adding streaming updates to other daemon commands under this scope.
+- Modifying how the daemon stores the logs in the file system.
+- Adding database/centralized log transport under this PRD.
+- Interactive keyboard shortcuts or log filtering by levels directly in the CLI logs command (which is better suited for external tools like `grep`).
 
 ## Further Notes
 
-- The implementation must ensure that any socket closure or connection error during streaming is handled gracefully, cleaning up terminal cursor visibility.
+None.
