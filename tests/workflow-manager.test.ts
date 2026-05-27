@@ -341,6 +341,45 @@ describe('WorkflowManager', () => {
       );
     });
 
+    it('should retry worktree removal with permission fixing using Docker if initial removal fails', async () => {
+      // Setup worktree workflow
+      (execSync as jest.Mock).mockImplementationOnce(() => Buffer.from(''));
+      await workflowManager.startWorkflow('wt-test-retry-perm', testDir, {
+        isWorktree: true,
+        sourceRepo: '/mock/repo',
+        branch: 'workflow/wt-test-retry-perm'
+      });
+
+      // Mark as done
+      const executor = (workflowManager as any).workflows.get('wt-test-retry-perm');
+      executor.status = 'Done';
+
+      // Clear mock
+      (execSync as jest.Mock).mockClear();
+
+      // Mock first remove to fail, and second to succeed
+      let callCount = 0;
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('worktree remove')) {
+          callCount++;
+          if (callCount === 1) {
+            throw new Error('Permission denied');
+          }
+        }
+        return Buffer.from('');
+      });
+
+      await workflowManager.removeWorkflow('wt-test-retry-perm', undefined, true);
+
+      // Verify it called chown in Docker run
+      expect(execSync).toHaveBeenCalledWith(
+        expect.stringContaining('docker run --rm -v'),
+        expect.anything()
+      );
+      // Verify it retried worktree remove
+      expect(callCount).toBe(2);
+    });
+
     it('should copy PRD.md and tasks.md from sourceRepo if they exist and are missing in worktree', async () => {
       const srcRepo = path.resolve('./test-src-repo');
       if (fs.existsSync(srcRepo)) {

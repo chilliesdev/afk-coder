@@ -229,7 +229,14 @@ export class WorkflowManager {
         if (deleteDir) {
           this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting git worktree...');
           const sourceGit = this.gitClientFactory(executor.sourceRepo);
-          sourceGit.removeWorktree(executor.dir);
+          try {
+            sourceGit.removeWorktree(executor.dir);
+          } catch (gitError: any) {
+            logger?.warn(`Initial worktree removal failed: ${gitError.message}. Attempting permission fix...`);
+            this.ensureDirectoryWritable(executor.dir, executor.configDir, logger, onMilestone);
+            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Retrying git worktree removal...');
+            sourceGit.removeWorktree(executor.dir);
+          }
         } else {
           this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Untracking git worktree...');
           const gitPointerPath = path.join(executor.dir, '.git');
@@ -248,7 +255,14 @@ export class WorkflowManager {
       try {
         this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting workflow directory...');
         if (fs.existsSync(executor.dir)) {
-          fs.rmSync(executor.dir, { recursive: true, force: true });
+          try {
+            fs.rmSync(executor.dir, { recursive: true, force: true });
+          } catch (fsError: any) {
+            logger?.warn(`Initial directory deletion failed: ${fsError.message}. Attempting permission fix...`);
+            this.ensureDirectoryWritable(executor.dir, executor.configDir, logger, onMilestone);
+            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Retrying directory deletion...');
+            fs.rmSync(executor.dir, { recursive: true, force: true });
+          }
         }
       } catch (error: any) {
         logger?.error(`Failed to delete directory: ${error.message}`);
@@ -328,6 +342,38 @@ export class WorkflowManager {
         message,
         timestamp: new Date().toISOString()
       });
+    }
+  }
+
+  private ensureDirectoryWritable(
+    dir: string,
+    configDir?: string,
+    logger?: winston.Logger,
+    onMilestone?: (milestone: MilestoneEvent) => void
+  ) {
+    try {
+      const uid = process.getuid ? process.getuid() : 1000;
+      const gid = process.getgid ? process.getgid() : 1000;
+
+      const { ConfigManager } = require('../common/config');
+      const configManager = new ConfigManager(configDir);
+      const config = configManager.loadConfig();
+      const image = config.sandbox?.image || 'us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0';
+
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Fixing worktree directory permissions using Docker...');
+      
+      const resolvedDir = path.resolve(dir);
+      const parentDir = path.dirname(resolvedDir);
+      const baseName = path.basename(resolvedDir);
+
+      const { execSync } = require('node:child_process');
+      execSync(
+        `docker run --rm -v "${parentDir}:/workspace" -w /workspace ${image} chown -R ${uid}:${gid} "${baseName}"`,
+        { stdio: 'ignore' }
+      );
+    } catch (error: any) {
+      logger?.error(`Failed to change directory permissions via Docker: ${error.message}`);
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Docker permission fix failed: ${error.message}`);
     }
   }
 }

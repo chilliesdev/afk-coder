@@ -117,6 +117,23 @@ export class DockerRuntime implements ExecutionRuntime {
 
     if (container) {
       try {
+        const uid = process.getuid ? process.getuid() : 1000;
+        const gid = process.getgid ? process.getgid() : 1000;
+        const exec = await container.exec({
+          Cmd: ['chown', '-R', `${uid}:${gid}`, '/app'],
+          AttachStdout: true,
+          AttachStderr: true
+        });
+        const stream = await exec.start({ Detach: false });
+        await new Promise<void>((resolve) => {
+          stream.on('end', () => resolve());
+          stream.on('error', () => resolve());
+          setTimeout(() => resolve(), 5000);
+        });
+      } catch (error: any) {
+        // Ignore chown errors to ensure stop() always succeeds
+      }
+      try {
         await container.kill();
       } catch {
         // Container might already be stopped

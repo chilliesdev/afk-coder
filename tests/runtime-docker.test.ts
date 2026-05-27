@@ -35,6 +35,13 @@ describe('DockerRuntime', () => {
       logs: jest.fn().mockResolvedValue(Buffer.from([])),
       kill: jest.fn().mockResolvedValue({}),
       remove: jest.fn().mockResolvedValue({}),
+      exec: jest.fn().mockResolvedValue({
+        start: jest.fn().mockResolvedValue({
+          on: jest.fn().mockImplementation((event, cb) => {
+            if (event === 'end') cb();
+          })
+        })
+      })
     };
 
     (Docker.prototype.createContainer as jest.Mock).mockResolvedValue(mockContainer);
