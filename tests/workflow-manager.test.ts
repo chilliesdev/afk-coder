@@ -654,4 +654,63 @@ describe('WorkflowManager', () => {
       }
     });
   });
+
+  describe('Log Filtering', () => {
+    it('should filter logs by workflow name, supporting tail and offset options', async () => {
+      await resetBoard('- [ ] Task 1');
+      await workflowManager.startWorkflow('wf-filter-1', testDir);
+
+      const logFile = path.join(testDir, 'workflow.json.log');
+      const mockLogEntries = [
+        JSON.stringify({ workflow: 'wf-filter-1', message: 'log 1' }),
+        JSON.stringify({ workflow: 'wf-filter-2', message: 'log 2' }),
+        JSON.stringify({ workflow: 'wf-filter-1', message: 'log 3' }),
+        'non-json-line-wf-filter-1',
+        'non-json-line-wf-filter-2',
+        JSON.stringify({ workflow: 'wf-filter-1', message: 'log 4' }),
+      ].join('\n') + '\n';
+
+      fs.writeFileSync(logFile, mockLogEntries);
+
+      // Verify basic filtering
+      const logs = workflowManager.getLogs('wf-filter-1');
+      expect(logs.content).toContain('log 1');
+      expect(logs.content).toContain('log 3');
+      expect(logs.content).toContain('non-json-line-wf-filter-1');
+      expect(logs.content).toContain('log 4');
+      expect(logs.content).not.toContain('log 2');
+      expect(logs.content).not.toContain('non-json-line-wf-filter-2');
+
+      // Verify tail option
+      const tailedLogs = workflowManager.getLogs('wf-filter-1', { tail: 2 });
+      const tailedLines = tailedLogs.content.trim().split('\n');
+      expect(tailedLines.length).toBe(2);
+      expect(tailedLines[0]).toContain('non-json-line-wf-filter-1');
+      expect(tailedLines[1]).toContain('log 4');
+
+      // Verify offset option
+      // Write entry 1 and 2
+      const initialLogs = [
+        JSON.stringify({ workflow: 'wf-filter-1', message: 'init 1' }),
+        JSON.stringify({ workflow: 'wf-filter-2', message: 'init 2' })
+      ].join('\n') + '\n';
+      fs.writeFileSync(logFile, initialLogs);
+      const initialOffset = fs.statSync(logFile).size;
+
+      // Append new entries
+      const appendLogs = [
+        JSON.stringify({ workflow: 'wf-filter-1', message: 'append 3' }),
+        JSON.stringify({ workflow: 'wf-filter-2', message: 'append 4' })
+      ].join('\n') + '\n';
+      fs.appendFileSync(logFile, appendLogs);
+
+      const offsetLogs = workflowManager.getLogs('wf-filter-1', { offset: initialOffset });
+      expect(offsetLogs.content).toContain('append 3');
+      expect(offsetLogs.content).not.toContain('append 4');
+      expect(offsetLogs.content).not.toContain('init 1');
+      expect(offsetLogs.content).not.toContain('init 2');
+
+      await workflowManager.killWorkflow('wf-filter-1');
+    });
+  });
 });

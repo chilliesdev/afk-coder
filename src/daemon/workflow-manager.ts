@@ -200,6 +200,21 @@ export class WorkflowManager {
       return { content: 'No logs found.', nextOffset: 0 };
     }
 
+    const filterLogs = (rawContent: string): string => {
+      const lines = rawContent.split('\n');
+      const filtered = lines.filter(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        try {
+          const parsed = JSON.parse(trimmed);
+          return parsed.workflow === name;
+        } catch {
+          return trimmed.includes(name);
+        }
+      });
+      return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
+    };
+
     if (options.offset !== undefined) {
       const stats = fs.statSync(logFile);
       if (options.offset >= stats.size) {
@@ -209,15 +224,18 @@ export class WorkflowManager {
       const buffer = Buffer.alloc(stats.size - options.offset);
       fs.readSync(fd, buffer, 0, buffer.length, options.offset);
       fs.closeSync(fd);
-      return { content: buffer.toString('utf-8'), nextOffset: stats.size };
+      const filteredContent = filterLogs(buffer.toString('utf-8'));
+      return { content: filteredContent, nextOffset: stats.size };
     }
 
     const content = fs.readFileSync(logFile, 'utf8');
     const stats = fs.statSync(logFile);
+    const filteredContent = filterLogs(content);
     if (options.tail) {
-      const lines = content.trim().split('\n');
-      return { content: lines.slice(-options.tail).join('\n') + '\n', nextOffset: stats.size };
+      const lines = filteredContent.trim().split('\n');
+      const filteredLines = filteredContent.trim() ? lines : [];
+      return { content: filteredLines.slice(-options.tail).join('\n') + (filteredLines.length > 0 ? '\n' : ''), nextOffset: stats.size };
     }
-    return { content: content, nextOffset: stats.size };
+    return { content: filteredContent, nextOffset: stats.size };
   }
 }
