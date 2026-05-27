@@ -337,5 +337,33 @@ export class Agent {
     const prompt = this.adapter.getQALoopCommand();
     return this.runtime.run(prompt, dir, configDir);
   }
+
+  async generateCommitMessage(dir: string, configDir?: string): Promise<string> {
+    const defaultMessage = 'chore: auto-commit before workflow removal';
+    try {
+      if (this.runtime.start) {
+        await this.runtime.start(dir, configDir);
+      }
+      
+      const prompt = this.adapter.getCommitMessageCommand();
+      const run = await this.runtime.run(prompt, dir, configDir);
+      const result = await run.wait();
+      
+      if (result.exitCode !== 0 || !result.logs) {
+        return defaultMessage;
+      }
+      
+      const cleanMessage = result.logs.trim().replace(/^['"\s]+|['"\s]+$/g, '').split('\n')[0].trim();
+      return cleanMessage || defaultMessage;
+    } catch {
+      return defaultMessage;
+    } finally {
+      try {
+        await this.stop();
+      } catch {
+        // Ignore stop errors
+      }
+    }
+  }
 }
 

@@ -3,6 +3,7 @@ import * as winston from 'winston';
 import { Agent } from './agent';
 import { CodingPhaseAdapter, QaPhaseAdapter, WorkflowPhase, WorkflowPhaseContext } from './workflow-phase';
 import { GitClient, ShellGitClient } from '../common/git';
+import { ConfigManager } from '../common/config';
 
 
 export class WorkflowExecutor {
@@ -22,7 +23,8 @@ export class WorkflowExecutor {
   public phase: 'Coding' | 'QA' = 'Coding';
   public qaCycles: number = 0;
 
-  private agent: Agent;
+
+  public readonly agent: Agent;
   private taskBoard: ITaskBoard;
   private logger: winston.Logger;
   
@@ -56,6 +58,16 @@ export class WorkflowExecutor {
     this.codingPhase = new CodingPhaseAdapter();
     this.qaPhase = new QaPhaseAdapter();
     this.git = gitClient || new ShellGitClient(dir);
+  }
+
+  private isAutoCommitEnabled(): boolean {
+    try {
+      const configManager = new ConfigManager(this.configDir);
+      const config = configManager.loadConfig();
+      return config.git?.autoCommit === true;
+    } catch {
+      return false;
+    }
   }
 
   get uptime(): number {
@@ -102,7 +114,7 @@ export class WorkflowExecutor {
           reportCompletedTasks: async (tasks: Task[]) => {
             for (const t of tasks) {
               this.recentTasks.unshift(t.description);
-              if (this.isWorktree && this.sourceRepo && this.branch) {
+              if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
                 try {
                   this.git.add('.');
                   if (this.git.hasChanges()) {
@@ -130,7 +142,7 @@ export class WorkflowExecutor {
 
           if (nextPhase === 'Done') {
             this.status = 'Done';
-            if (this.isWorktree && this.sourceRepo && this.branch) {
+            if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
               try {
                 this.git.add('.');
                 if (this.git.hasChanges()) {
@@ -144,7 +156,7 @@ export class WorkflowExecutor {
             break;
           } else if (nextPhase.startsWith('Failed')) {
             this.status = nextPhase;
-            if (this.isWorktree && this.sourceRepo && this.branch) {
+            if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
               try {
                 this.git.add('.');
                 if (this.git.hasChanges()) {
@@ -167,7 +179,7 @@ export class WorkflowExecutor {
           if (this.status !== 'Killed') {
             this.logger.error('Workflow loop failed with exception', { error: error.message });
             this.status = 'Failed';
-            if (this.isWorktree && this.sourceRepo && this.branch) {
+            if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
               try {
                 this.git.add('.');
                 if (this.git.hasChanges()) {

@@ -485,10 +485,27 @@ program
   .command('remove <workflow_name>')
   .description('Remove a finished or failed workflow from the daemon')
   .action(async (workflowName) => {
+    const spinner = new Spinner('Connecting to daemon...');
+    spinner.start();
     try {
-      const response = await sendCommand('remove', { name: workflowName });
+      const response = await sendCommand('remove', { name: workflowName }, (milestone) => {
+        switch (milestone.status) {
+          case MILESTONE_STATUS.STARTING:
+            spinner.start(milestone.message);
+            break;
+          case MILESTONE_STATUS.INFO:
+            spinner.update(milestone.message);
+            break;
+          case MILESTONE_STATUS.COMPLETED:
+            spinner.stop(milestone.message, true);
+            break;
+          case MILESTONE_STATUS.FAILED:
+            spinner.stop(milestone.message, false);
+            break;
+        }
+      });
       if (!response.success) {
-        console.error(`Failed to remove workflow: ${response.message}`);
+        spinner.stop(`Failed to remove workflow: ${response.message}`, false);
         return;
       }
       if (response.data && response.data.isWorktree && response.data.dir) {
@@ -499,9 +516,11 @@ program
           // Ignore errors
         }
       }
-      console.log(`Workflow ${workflowName} removed.`);
+      spinner.stop(`Workflow ${workflowName} removed.`, true);
     } catch (error: any) {
-      console.error(error.message);
+      spinner.stop(`Error: ${error.message}`, false);
+    } finally {
+      spinner.stop();
     }
   });
 

@@ -14,4 +14,9 @@ export interface AgentAdapter {
    * Returns the CLI command to run the QA loop.
    */
   getQALoopCommand(): string;
+
+  /**
+   * Returns the CLI command to generate a commit message based on the repository's git status/diff.
+   */
+  getCommitMessageCommand(): string;
 }

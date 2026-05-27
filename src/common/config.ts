@@ -24,6 +24,9 @@ export interface Config {
     scopes?: string[];
     redirectUri?: string;
   };
+  git?: {
+    autoCommit?: boolean;
+  };
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -42,6 +45,9 @@ const DEFAULT_CONFIG: Config = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     redirectUri: 'http://localhost:3000',
+  },
+  git: {
+    autoCommit: false,
   },
 };
 
@@ -83,6 +89,10 @@ export class ConfigManager {
         auth: {
           ...DEFAULT_CONFIG.auth,
           ...userConfig.auth,
+        },
+        git: {
+          ...DEFAULT_CONFIG.git,
+          ...userConfig.git,
         },
       } as Config;
     } catch (error) {

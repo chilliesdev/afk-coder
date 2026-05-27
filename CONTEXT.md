@@ -18,4 +18,5 @@ This document defines the core domain language used in the Gemini AFK Coding Dae
 - **ExecutionRuntime** — An isolated environment where the **Agent** operates. It provides a clean seam between the daemon and the underlying infrastructure (e.g., Docker).
 - **WorkflowExecutor** — A state machine that drives a single **Workflow** by delegating execution to **WorkflowPhase** adapters.
 - **WorkflowManager** — The overarching orchestrator that tracks and manages the lifecycles of multiple running **WorkflowExecutors**.
+- **Auto-commit** — A feature that automatically stages and commits codebase changes during a Workflow (e.g., when a task is completed, or when the workflow completes or fails). It is configurable via `git.autoCommit`. A special auto-commit safety behavior also triggers during workflow removal to prevent losing worktree changes.
 

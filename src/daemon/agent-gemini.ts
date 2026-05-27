@@ -12,4 +12,8 @@ export class GeminiAdapter implements AgentAdapter {
   getQALoopCommand(): string {
     return `gemini --yolo --prompt "Read the PRD.md file and examine the codebase. Start the application if necessary to test it, and interact with it through external channels (e.g. HTTP, curl) as an end user would. Verify that all requirements in PRD.md are met. If you find any failures, bugs, or missing requirements, append them as new, uncompleted tasks to the end of tasks.md. Every new task must be formatted exactly as '- [ ] Task description [PRD: section or requirement name]'. Do NOT add any tasks that go beyond the scope of PRD.md. If all tests pass and there are no gaps, do not modify tasks.md. Exit when finished."`;
   }
+
+  getCommitMessageCommand(): string {
+    return `gemini --yolo --prompt "Analyze the git status and git diff of the repository. Generate a concise, one-line git commit message that describes the uncommitted changes. Output ONLY the commit message and nothing else."`;
+  }
 }

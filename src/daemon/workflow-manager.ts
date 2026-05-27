@@ -1,7 +1,8 @@
-import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent } from '../common/types';
+import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent, MILESTONE_STATUS, MILESTONE_TYPE, MilestoneStatus } from '../common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitClient, ShellGitClient } from '../common/git';
+import { ConfigManager } from '../common/config';
 
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
@@ -162,27 +163,52 @@ export class WorkflowManager {
     await executor.kill();
   }
 
-  removeWorkflow(name: string) {
+  async removeWorkflow(name: string, onMilestone?: (milestone: MilestoneEvent) => void) {
     const executor = this.workflows.get(name);
     if (!executor) {
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Workflow ${name} not found`);
       throw new Error(`Workflow ${name} not found`);
     }
 
     if (executor.status !== 'Done' && !executor.status.startsWith('Failed') && executor.status !== 'Killed') {
+      this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Workflow ${name} is still running. Kill it first.`);
       throw new Error(`Workflow ${name} is still running. Kill it first.`);
+    }
+
+    this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, `Removing workflow ${name}...`);
+
+    if (executor.isWorktree && executor.sourceRepo && executor.branch) {
+      try {
+        const git = executor.git;
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Checking for uncommitted changes...');
+        if (git.hasChanges()) {
+          git.add('.');
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Generating commit message using AI...');
+          const commitMsg = await executor.agent.generateCommitMessage(executor.dir, executor.configDir);
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Committing changes: "${commitMsg}"...`);
+          git.commit(commitMsg);
+        }
+      } catch (error: any) {
+        console.error(`Failed to auto-commit changes before removing workflow: ${error.message}`);
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Skipped auto-commit due to error: ${error.message}`);
+      }
     }
 
     if (executor.isWorktree && executor.sourceRepo) {
       try {
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting git worktree...');
         const sourceGit = this.gitClientFactory(executor.sourceRepo);
         sourceGit.removeWorktree(executor.dir);
       } catch (error: any) {
         console.error(`Failed to remove worktree: ${error.message}`);
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to delete git worktree: ${error.message}`);
+        throw error;
       }
     }
 
     this.workflows.delete(name);
     this.loggers.delete(name);
+    this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, `Workflow ${name} successfully removed.`);
   }
 
   async init(args: { dir: string, prd: string, force?: boolean, configDir?: string, agent?: string }, onMilestone?: (milestone: MilestoneEvent) => void) {
@@ -237,5 +263,20 @@ export class WorkflowManager {
       return { content: filteredLines.slice(-options.tail).join('\n') + (filteredLines.length > 0 ? '\n' : ''), nextOffset: stats.size };
     }
     return { content: filteredContent, nextOffset: stats.size };
+  }
+
+  private emitMilestone(
+    onMilestone: ((event: MilestoneEvent) => void) | undefined,
+    status: MilestoneStatus,
+    message: string
+  ) {
+    if (onMilestone) {
+      onMilestone({
+        type: MILESTONE_TYPE,
+        status,
+        message,
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 }
