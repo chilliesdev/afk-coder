@@ -177,19 +177,50 @@ export class WorkflowManager {
 
     this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, `Removing workflow ${name}...`);
 
+    const logger = this.loggers.get(name);
+
+    if (executor.isWorktree && executor.sourceRepo) {
+      try {
+        const destDir = path.join(executor.sourceRepo, '.afk-coder', 'tasks', name);
+        fs.mkdirSync(destDir, { recursive: true });
+
+        const srcTasks = path.join(executor.dir, 'tasks.md');
+        const srcPrd = path.join(executor.dir, 'PRD.md');
+
+        if (fs.existsSync(srcTasks)) {
+          fs.copyFileSync(srcTasks, path.join(destDir, 'tasks.md'));
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Archived tasks.md to .afk-coder/tasks/${name}/`);
+        }
+        if (fs.existsSync(srcPrd)) {
+          fs.copyFileSync(srcPrd, path.join(destDir, 'PRD.md'));
+          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Archived PRD.md to .afk-coder/tasks/${name}/`);
+        }
+      } catch (error: any) {
+        logger?.error(`Failed to archive workflow files: ${error.message}`);
+        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Failed to archive workflow files: ${error.message}`);
+      }
+    }
+
     if (executor.isWorktree && executor.sourceRepo && executor.branch) {
       try {
         const git = executor.git;
         this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Checking for uncommitted changes...');
         if (git.hasChanges()) {
           git.add('.');
-          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Generating commit message using AI...');
-          const commitMsg = await executor.agent.generateCommitMessage(executor.dir, executor.configDir);
-          this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Committing changes: "${commitMsg}"...`);
-          git.commit(commitMsg);
+          git.reset('tasks.md');
+          git.reset('PRD.md');
+
+          if (git.hasStagedChanges()) {
+            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Generating commit message using AI...');
+            const commitMsg = await executor.agent.generateCommitMessage(executor.dir, executor.configDir);
+            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Committing changes: "${commitMsg}"...`);
+            git.commit(commitMsg);
+          } else {
+            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'No other changes to commit.');
+          }
         }
       } catch (error: any) {
-        console.error(`Failed to auto-commit changes before removing workflow: ${error.message}`);
+        logger?.error(`Failed to auto-commit changes before removing workflow: ${error.message}`);
         this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Skipped auto-commit due to error: ${error.message}`);
       }
     }
@@ -200,7 +231,7 @@ export class WorkflowManager {
         const sourceGit = this.gitClientFactory(executor.sourceRepo);
         sourceGit.removeWorktree(executor.dir);
       } catch (error: any) {
-        console.error(`Failed to remove worktree: ${error.message}`);
+        logger?.error(`Failed to remove worktree: ${error.message}`);
         this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to delete git worktree: ${error.message}`);
         throw error;
       }

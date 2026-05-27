@@ -18,6 +18,7 @@ describe('WorkflowManager', () => {
   let mockTaskBoard: TaskBoard;
   let inMemoryStorage: InMemoryTaskStorage;
   const testDir = path.resolve('./test-workflow-manager');
+  const sourceRepoDir = path.resolve('./test-workflow-manager-source');
 
   const resetBoard = async (content: string) => {
     await inMemoryStorage.write(content);
@@ -28,7 +29,11 @@ describe('WorkflowManager', () => {
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
+    if (fs.existsSync(sourceRepoDir)) {
+      fs.rmSync(sourceRepoDir, { recursive: true, force: true });
+    }
     fs.mkdirSync(testDir);
+    fs.mkdirSync(sourceRepoDir);
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD\nTest PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     (execSync as jest.Mock).mockClear();
@@ -59,6 +64,11 @@ describe('WorkflowManager', () => {
     if (fs.existsSync(testDir)) {
       try {
         fs.rmSync(testDir, { recursive: true, force: true });
+      } catch {}
+    }
+    if (fs.existsSync(sourceRepoDir)) {
+      try {
+        fs.rmSync(sourceRepoDir, { recursive: true, force: true });
       } catch {}
     }
     const testConfigDir = path.resolve('./test-config-wt-commit');
@@ -519,7 +529,7 @@ describe('WorkflowManager', () => {
 
       await workflowManager.startWorkflow('wt-test-remove-commit', testDir, {
         isWorktree: true,
-        sourceRepo: '/mock/repo',
+        sourceRepo: sourceRepoDir,
         branch: 'workflow/wt-test-remove-commit'
       });
 
@@ -534,6 +544,9 @@ describe('WorkflowManager', () => {
         if (cmd.includes('git -c safe.directory=* status --porcelain')) {
           return Buffer.from('M modified-file.ts\n');
         }
+        if (cmd.includes('git -c safe.directory=* diff --cached --name-only')) {
+          return Buffer.from('modified-file.ts\n');
+        }
         return Buffer.from('');
       });
 
@@ -547,9 +560,28 @@ describe('WorkflowManager', () => {
         expect.objectContaining({ status: 'completed' })
       );
 
-      // Assert git add, agent generation run, and git commit were called
+      // Assert archiving took place in the filesystem
+      const archivedTasksPath = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-remove-commit', 'tasks.md');
+      const archivedPrdPath = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-remove-commit', 'PRD.md');
+      expect(fs.existsSync(archivedTasksPath)).toBe(true);
+      expect(fs.existsSync(archivedPrdPath)).toBe(true);
+      expect(fs.readFileSync(archivedTasksPath, 'utf8')).toContain('- [ ] Task 1');
+
+      // Assert git add, resets, diff, and git commit were called
       expect(execSync).toHaveBeenCalledWith(
         'git -c safe.directory=* add .',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* reset -- tasks.md',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* reset -- PRD.md',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* diff --cached --name-only',
         expect.objectContaining({ cwd: testDir })
       );
       expect(execSync).toHaveBeenCalledWith(
@@ -558,8 +590,171 @@ describe('WorkflowManager', () => {
       );
       expect(execSync).toHaveBeenCalledWith(
         `git -c safe.directory=* worktree remove --force "${testDir}"`,
-        expect.objectContaining({ cwd: '/mock/repo' })
+        expect.objectContaining({ cwd: sourceRepoDir })
       );
+    });
+
+    it('should archive tasks.md and PRD.md and skip auto-commit when no other changes are present', async () => {
+      await resetBoard('- [ ] Task 1');
+      fs.rmSync(testDir, { recursive: true, force: true });
+
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+          fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
+        }
+        if (cmd.includes('git -c safe.directory=* status --porcelain')) {
+          return Buffer.from('M tasks.md\nM PRD.md\n');
+        }
+        return Buffer.from('');
+      });
+
+      mockRuntime.nextResult = {
+        exitCode: 0,
+        logs: 'Success'
+      };
+
+      await workflowManager.startWorkflow('wt-test-remove-no-commit', testDir, {
+        isWorktree: true,
+        sourceRepo: sourceRepoDir,
+        branch: 'workflow/wt-test-remove-no-commit'
+      });
+
+      const executor = (workflowManager as any).workflows.get('wt-test-remove-no-commit');
+      executor.status = 'Done';
+
+      (execSync as jest.Mock).mockClear();
+
+      // Mock status check to simulate only tasks/PRD changes
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('git -c safe.directory=* status --porcelain')) {
+          return Buffer.from('M tasks.md\nM PRD.md\n');
+        }
+        if (cmd.includes('git -c safe.directory=* diff --cached --name-only')) {
+          return Buffer.from('');
+        }
+        return Buffer.from('');
+      });
+
+      const milestones: any[] = [];
+      await workflowManager.removeWorkflow('wt-test-remove-no-commit', (m) => milestones.push(m));
+
+      expect(milestones).toContainEqual(
+        expect.objectContaining({ status: 'starting' })
+      );
+      expect(milestones).toContainEqual(
+        expect.objectContaining({ status: 'completed' })
+      );
+
+      // Assert archiving took place
+      const archivedTasksPath = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-remove-no-commit', 'tasks.md');
+      const archivedPrdPath = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-remove-no-commit', 'PRD.md');
+      expect(fs.existsSync(archivedTasksPath)).toBe(true);
+      expect(fs.existsSync(archivedPrdPath)).toBe(true);
+
+      // Assert git add and resets were called, but NOT git commit
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* add .',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* reset -- tasks.md',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* reset -- PRD.md',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'git -c safe.directory=* diff --cached --name-only',
+        expect.objectContaining({ cwd: testDir })
+      );
+      expect(execSync).not.toHaveBeenCalledWith(
+        expect.stringContaining('commit'),
+        expect.anything()
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        `git -c safe.directory=* worktree remove --force "${testDir}"`,
+        expect.objectContaining({ cwd: sourceRepoDir })
+      );
+    });
+
+    it('should archive files by overwriting existing files in the destination directory', async () => {
+      await resetBoard('- [ ] Task 1');
+      fs.rmSync(testDir, { recursive: true, force: true });
+
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+          fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD New Content');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1 New Content');
+        }
+        return Buffer.from('');
+      });
+
+      // Pre-create the destination files with old content
+      const destDir = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-overwrite');
+      fs.mkdirSync(destDir, { recursive: true });
+      fs.writeFileSync(path.join(destDir, 'tasks.md'), '- [x] Old Tasks');
+      fs.writeFileSync(path.join(destDir, 'PRD.md'), '# Old PRD');
+
+      await workflowManager.startWorkflow('wt-test-overwrite', testDir, {
+        isWorktree: true,
+        sourceRepo: sourceRepoDir,
+        branch: 'workflow/wt-test-overwrite'
+      });
+
+      const executor = (workflowManager as any).workflows.get('wt-test-overwrite');
+      executor.status = 'Done';
+
+      (execSync as jest.Mock).mockClear();
+
+      await workflowManager.removeWorkflow('wt-test-overwrite');
+
+      // Verify that the destination files were overwritten with new content
+      const archivedTasksPath = path.join(destDir, 'tasks.md');
+      const archivedPrdPath = path.join(destDir, 'PRD.md');
+      expect(fs.readFileSync(archivedTasksPath, 'utf8')).toContain('- [ ] Task 1 New Content');
+      expect(fs.readFileSync(archivedPrdPath, 'utf8')).toContain('# PRD New Content');
+    });
+
+    it('should handle missing tasks.md and PRD.md gracefully during removal', async () => {
+      await resetBoard('- [ ] Task 1');
+      fs.rmSync(testDir, { recursive: true, force: true });
+
+      (execSync as jest.Mock).mockImplementation((cmd: string) => {
+        if (cmd.includes('git -c safe.directory=* worktree add')) {
+          fs.mkdirSync(testDir, { recursive: true });
+          // Note: we create them initially to pass startWorkflow validation, but we will delete them before removal
+          fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD');
+          fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
+        }
+        return Buffer.from('');
+      });
+
+      await workflowManager.startWorkflow('wt-test-missing-files', testDir, {
+        isWorktree: true,
+        sourceRepo: sourceRepoDir,
+        branch: 'workflow/wt-test-missing-files'
+      });
+
+      const executor = (workflowManager as any).workflows.get('wt-test-missing-files');
+      executor.status = 'Done';
+
+      // Delete the files from the worktree directory before removal
+      fs.rmSync(path.join(testDir, 'tasks.md'), { force: true });
+      fs.rmSync(path.join(testDir, 'PRD.md'), { force: true });
+
+      (execSync as jest.Mock).mockClear();
+
+      // Verify it does not throw
+      await expect(workflowManager.removeWorkflow('wt-test-missing-files')).resolves.not.toThrow();
+
+      // Verify archiving directory is empty or doesn't have the files
+      const destDir = path.join(sourceRepoDir, '.afk-coder', 'tasks', 'wt-test-missing-files');
+      expect(fs.existsSync(path.join(destDir, 'tasks.md'))).toBe(false);
+      expect(fs.existsSync(path.join(destDir, 'PRD.md'))).toBe(false);
     });
 
     it('should remove a standard (non-worktree) workflow without git commands', async () => {

@@ -3,8 +3,10 @@ import { execSync } from 'node:child_process';
 export interface GitClient {
   getTopLevel(): string;
   add(pattern?: string): void;
+  reset(pattern: string): void;
   status(): string;
   hasChanges(): boolean;
+  hasStagedChanges(): boolean;
   commit(message: string): void;
   pruneWorktrees(): void;
   hasBranch(branch: string): boolean;
@@ -44,12 +46,20 @@ export class ShellGitClient implements GitClient {
     this.exec(['add', pattern]);
   }
 
+  reset(pattern: string): void {
+    this.exec(['reset', '--', pattern]);
+  }
+
   status(): string {
     return this.exec(['status', '--porcelain']);
   }
 
   hasChanges(): boolean {
     return this.status().length > 0;
+  }
+
+  hasStagedChanges(): boolean {
+    return this.exec(['diff', '--cached', '--name-only']).length > 0;
   }
 
   commit(message: string): void {
@@ -105,6 +115,8 @@ export class MockGitClient implements GitClient {
   public worktrees: Map<string, string> = new Map(); // targetPath -> branch
   public commits: { message: string }[] = [];
   public added: string[] = [];
+  public resets: string[] = [];
+  public mockHasStagedChanges: boolean = false;
   public pruned: boolean = false;
 
   constructor(public readonly dir: string) {}
@@ -117,12 +129,20 @@ export class MockGitClient implements GitClient {
     this.added.push(pattern);
   }
 
+  reset(pattern: string): void {
+    this.resets.push(pattern);
+  }
+
   status(): string {
     return this.changesStatus;
   }
 
   hasChanges(): boolean {
     return this.changesStatus.trim().length > 0;
+  }
+
+  hasStagedChanges(): boolean {
+    return this.mockHasStagedChanges;
   }
 
   commit(message: string): void {
