@@ -71,7 +71,7 @@ describe('Agent Adapter Integration', () => {
       attempts++;
     }
     
-    expect(mockRuntime.lastPrompt).toContain('gemini --yolo --prompt');
+    expect(mockRuntime.lastPrompt).toContain('gemini --yolo --output-format json --prompt');
     await wm.killWorkflow('gemini-wf');
   });
 

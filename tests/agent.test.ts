@@ -34,7 +34,7 @@ describe('Agent', () => {
 
   it('should run autonomous loop with correct prompt', async () => {
     await agent.runAutonomousLoop('/some/dir');
-    expect(mockRuntime.lastPrompt).toContain('gemini --yolo --prompt');
+    expect(mockRuntime.lastPrompt).toContain('gemini --yolo --output-format json --prompt');
     expect(mockRuntime.lastPrompt).toContain('tasks.md');
     expect(mockRuntime.lastPrompt).toContain('highest priority uncompleted task');
     expect(mockRuntime.lastDir).toBe('/some/dir');

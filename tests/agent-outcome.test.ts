@@ -27,7 +27,30 @@ Done!
       { logs: 'tokens: 10 in, 20 out', input: 10, output: 20 },
       { logs: 'input: 10, output: 20', input: 10, output: 20 },
       { logs: 'Usage: 10 input, 20 output', input: 10, output: 20 },
-      { logs: 'Tokens: 10 prompt, 20 completion', input: 10, output: 20 }
+      { logs: 'Tokens: 10 prompt, 20 completion', input: 10, output: 20 },
+      {
+        logs: JSON.stringify({
+          session_id: 'test',
+          response: 'hello',
+          stats: {
+            models: {
+              'gemini-3.5-flash': {
+                tokens: {
+                  prompt: 10,
+                  candidates: 20
+                }
+              }
+            }
+          }
+        }),
+        input: 10,
+        output: 20
+      },
+      {
+        logs: `Warning: terminal dumb\n{"type":"init"}\n{"type":"result","stats":{"models":{"gemini-3.5-flash":{"input_tokens":10,"output_tokens":20}}}}`,
+        input: 10,
+        output: 20
+      }
     ];
 
     patterns.forEach(p => {
@@ -75,6 +98,60 @@ Done!
     expect(outcome.success).toBe(false);
     expect(outcome.tokens.total).toBe(30);
     expect(outcome.error?.type).toBe('Quota');
+  });
+
+  describe('helper methods', () => {
+    it('should extract values using extractTokenValues', () => {
+      const res = (analyzer as any).extractTokenValues({ prompt: 10, candidates: 20 });
+      expect(res).toEqual({ input: 10, output: 20, total: 30 });
+
+      const resString = (analyzer as any).extractTokenValues({ prompt: '10', candidates: '20' });
+      expect(resString).toEqual({ input: 10, output: 20, total: 30 });
+
+      const resInvalid = (analyzer as any).extractTokenValues({ prompt: 'not a number' });
+      expect(resInvalid).toBeNull();
+    });
+
+    it('should extract stats from nested and flat objects using extractFromStats', () => {
+      const nestedStats = {
+        models: {
+          'gemini-3.5-flash': {
+            tokens: { prompt: 15, candidates: 25 }
+          }
+        }
+      };
+      expect((analyzer as any).extractFromStats(nestedStats)).toEqual({ input: 15, output: 25, total: 40 });
+
+      const flatStats = {
+        models: {
+          'gemini-3.5-flash': { prompt: 15, candidates: 25 }
+        }
+      };
+      expect((analyzer as any).extractFromStats(flatStats)).toEqual({ input: 15, output: 25, total: 40 });
+
+      const rootStats = { prompt: 15, candidates: 25 };
+      expect((analyzer as any).extractFromStats(rootStats)).toEqual({ input: 15, output: 25, total: 40 });
+    });
+
+    it('should parse JSON stats using parseFullJson', () => {
+      const logs = 'prefix {"stats": {"models": {"gemini": {"tokens": {"prompt": 5, "candidates": 10}}}}} suffix';
+      expect((analyzer as any).parseFullJson(logs)).toEqual({ input: 5, output: 10, total: 15 });
+
+      expect((analyzer as any).parseFullJson('invalid { json')).toBeNull();
+    });
+
+    it('should parse NDJSON using parseNdjson', () => {
+      const logs = 'line 1\n{"type":"result","stats":{"prompt": 5, "candidates": 10}}\nline 3';
+      expect((analyzer as any).parseNdjson(logs)).toEqual({ input: 5, output: 10, total: 15 });
+    });
+
+    it('should parse regex stats using parseRegexStats', () => {
+      expect((analyzer as any).parseRegexStats('Token usage: 100 prompt, 50 completion')).toEqual({
+        input: 100,
+        output: 50,
+        total: 150
+      });
+    });
   });
 });
 

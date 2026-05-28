@@ -92,6 +92,8 @@ export class Agent {
           newlyCompleted.length
         );
 
+        result.logs = this.cleanAgentLogs(result.logs || '');
+
         tokenUsage.input += decision.tokens.input;
         tokenUsage.output += decision.tokens.output;
         tokenUsage.total += decision.tokens.total;
@@ -170,11 +172,14 @@ export class Agent {
 
         if (this.isKilled) break;
 
+        const cleanLogs = this.cleanAgentLogs(result.logs || '');
+
         if (result.exitCode === 0) {
           const parsed = this.analyzer.parseAgentOutput(result.logs || '', result.exitCode);
           tokenUsage.input += parsed.tokens.input;
           tokenUsage.output += parsed.tokens.output;
           tokenUsage.total += parsed.tokens.total;
+          result.logs = cleanLogs;
           return { success: true, tokenUsage };
         }
         
@@ -182,6 +187,8 @@ export class Agent {
         tokenUsage.input += decision.tokens.input;
         tokenUsage.output += decision.tokens.output;
         tokenUsage.total += decision.tokens.total;
+
+        result.logs = cleanLogs;
 
         if (decision.action === 'retry') {
           retries++;
@@ -364,6 +371,22 @@ export class Agent {
         // Ignore stop errors
       }
     }
+  }
+
+  private cleanAgentLogs(logs: string): string {
+    const jsonStart = logs.indexOf('{');
+    const jsonEnd = logs.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      try {
+        const parsed = JSON.parse(logs.substring(jsonStart, jsonEnd + 1));
+        if (parsed && typeof parsed === 'object' && parsed.response !== undefined) {
+          return parsed.response;
+        }
+      } catch {
+        // Keep logs as is
+      }
+    }
+    return logs;
   }
 }
 
