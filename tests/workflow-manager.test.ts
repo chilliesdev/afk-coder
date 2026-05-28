@@ -397,7 +397,7 @@ describe('WorkflowManager', () => {
       expect(callCount).toBe(2);
     });
 
-    it('should copy PRD.md and tasks.md from sourceRepo if they exist and are missing in worktree', async () => {
+    it('should move PRD.md and tasks.md from sourceRepo if they exist and are missing in worktree', async () => {
       const srcRepo = path.resolve('./test-src-repo');
       if (fs.existsSync(srcRepo)) {
         fs.rmSync(srcRepo, { recursive: true, force: true });
@@ -422,10 +422,12 @@ describe('WorkflowManager', () => {
         branch: 'workflow/wt-test-copy'
       });
 
-      // Verify they were copied
+      // Verify they were moved
       expect(fs.existsSync(path.join(testDir, 'PRD.md'))).toBe(true);
       expect(fs.existsSync(path.join(testDir, 'tasks.md'))).toBe(true);
       expect(fs.readFileSync(path.join(testDir, 'PRD.md'), 'utf8')).toBe('# Source PRD');
+      expect(fs.existsSync(path.join(srcRepo, 'PRD.md'))).toBe(false);
+      expect(fs.existsSync(path.join(srcRepo, 'tasks.md'))).toBe(false);
 
       // Cleanup
       fs.rmSync(srcRepo, { recursive: true, force: true });

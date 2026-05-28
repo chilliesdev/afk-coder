@@ -36,6 +36,19 @@ export class WorkflowManager extends EventEmitter {
     this.gitClientFactory = gitClientFactory;
   }
 
+  private safeMoveSync(src: string, dest: string) {
+    try {
+      fs.renameSync(src, dest);
+    } catch (error: any) {
+      if (error.code === 'EXDEV') {
+        fs.copyFileSync(src, dest);
+        fs.unlinkSync(src);
+      } else {
+        throw error;
+      }
+    }
+  }
+
   private getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger {
     if (this.loggers.has(name)) {
       return this.loggers.get(name)!;
@@ -132,10 +145,10 @@ export class WorkflowManager extends EventEmitter {
       const destTasks = path.join(dir, 'tasks.md');
 
       if (fs.existsSync(srcPrd) && !fs.existsSync(destPrd)) {
-        fs.copyFileSync(srcPrd, destPrd);
+        this.safeMoveSync(srcPrd, destPrd);
       }
       if (fs.existsSync(srcTasks) && !fs.existsSync(destTasks)) {
-        fs.copyFileSync(srcTasks, destTasks);
+        this.safeMoveSync(srcTasks, destTasks);
       }
     }
 
