@@ -1314,6 +1314,27 @@ describe('WorkflowManager', () => {
       expect(fileTransport.dirname).toBe(expectedLogDir);
       expect(fileTransport.filename).toBe('test-rotate-4.json.log');
     });
+
+    it('should initialize Winston logger with the configured logLevel from daemon settings', async () => {
+      const testConfigDir = path.resolve('./test-config-log-level');
+      if (fs.existsSync(testConfigDir)) {
+        fs.rmSync(testConfigDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(testConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(testConfigDir, 'config.json'),
+        JSON.stringify({
+          daemon: {
+            logLevel: 'debug'
+          }
+        })
+      );
+
+      const logger = (workflowManager as any).getOrCreateLogger('test-log-level-wf', testDir, testConfigDir);
+      expect(logger.level).toBe('debug');
+
+      fs.rmSync(testConfigDir, { recursive: true, force: true });
+    });
   });
 
   describe('Real-time Log Streaming integration', () => {

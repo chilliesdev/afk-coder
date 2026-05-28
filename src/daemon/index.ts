@@ -1,9 +1,11 @@
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as child_process from 'node:child_process';
+import * as path from 'node:path';
+import * as winston from 'winston';
 import { WorkflowManager, AgentFactory } from './workflow-manager';
 import { DaemonResponse, StartWorkflowRequestArgs } from '../common/types';
-import { ConfigManager } from '../common/config';
+import { ConfigManager, getLogsDir } from '../common/config';
 import { DockerRuntime } from './runtime-docker';
 import { Agent } from './agent';
 import { TaskValidator } from '../common/validation';
@@ -16,6 +18,52 @@ import { AiderAdapter } from './agent-aider';
 const configManager = new ConfigManager();
 const config = configManager.loadConfig();
 const validator = new TaskValidator();
+
+// Configure Daemon Logger
+const logsDir = getLogsDir(config);
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+const daemonLogFile = path.join(logsDir, 'daemon.json.log');
+
+let maxSize = 10 * 1024 * 1024; // 10MB default
+let maxFiles = 5;
+
+if (config.daemon?.logRotation?.maxSize !== undefined) {
+  const sizeVal = Number(config.daemon.logRotation.maxSize);
+  if (!isNaN(sizeVal) && sizeVal >= 0) {
+    maxSize = sizeVal;
+  }
+}
+if (config.daemon?.logRotation?.maxFiles !== undefined) {
+  const filesVal = Number(config.daemon.logRotation.maxFiles);
+  if (!isNaN(filesVal) && filesVal >= 0) {
+    maxFiles = filesVal;
+  }
+}
+
+export const daemonLogger = winston.createLogger({
+  level: config.daemon?.logLevel || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'afk-coder-daemon' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    }),
+    new winston.transports.File({
+      filename: daemonLogFile,
+      maxsize: maxSize,
+      maxFiles: maxFiles,
+      tailable: true,
+    })
+  ]
+});
 
 const agentFactory: AgentFactory = (agentName?: string) => {
   const name = agentName || config.daemon?.agent || 'gemini';
@@ -54,9 +102,9 @@ if (fs.existsSync(SOCKET_PATH)) {
     fs.unlinkSync(SOCKET_PATH);
   } catch (error: any) {
     if (error.code === 'EPERM' || error.code === 'EACCES') {
-      console.error(`Error: ${error.code}: operation not permitted, unlink '${SOCKET_PATH}'`);
-      console.error('The socket might be owned by another user.');
-      console.error('Use --socket <path> or AFK_CODER_SOCKET env var to specify a different path.');
+      daemonLogger.error(`Error: ${error.code}: operation not permitted, unlink '${SOCKET_PATH}'`);
+      daemonLogger.error('The socket might be owned by another user.');
+      daemonLogger.error('Use --socket <path> or AFK_CODER_SOCKET env var to specify a different path.');
       process.exit(1);
     }
     throw error;
@@ -191,10 +239,10 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(SOCKET_PATH, () => {
-  console.log(`Daemon listening on ${SOCKET_PATH}`);
+  daemonLogger.info(`Daemon listening on ${SOCKET_PATH}`);
   try {
     fs.chmodSync(SOCKET_PATH, '660');
-    console.log(`Socket permissions set to 660`);
+    daemonLogger.info(`Socket permissions set to 660`);
 
     const socketGroup = config.daemon?.socketGroup;
     if (socketGroup) {
@@ -203,26 +251,26 @@ server.listen(SOCKET_PATH, () => {
         const gid = child_process.execSync(`getent group ${socketGroup} | cut -d: -f3`, { encoding: 'utf8' }).trim();
         if (!gid) {
           if (socketGroup === 'afk-coder-users') {
-            console.log(`Group ${socketGroup} not found. Skipping socket group ownership change (this is expected in development).`);
+            daemonLogger.info(`Group ${socketGroup} not found. Skipping socket group ownership change (this is expected in development).`);
           } else {
-            console.warn(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
+            daemonLogger.warn(`Group ${socketGroup} not found. Skipping socket group ownership change.`);
           }
           return;
         }
         
         const uid = process.getuid ? process.getuid() : 0;
         fs.chownSync(SOCKET_PATH, uid, Number.parseInt(gid));
-        console.log(`Socket group ownership set to ${socketGroup} (${gid})`);
+        daemonLogger.info(`Socket group ownership set to ${socketGroup} (${gid})`);
       } catch (error: any) {
         if (socketGroup === 'afk-coder-users') {
-          console.log(`Group ${socketGroup} not found or could not be queried. Skipping socket group ownership change.`);
+          daemonLogger.info(`Group ${socketGroup} not found or could not be queried. Skipping socket group ownership change.`);
           return;
         }
-        console.warn(`Failed to set socket group ownership to ${socketGroup}: ${error.message}`);
+        daemonLogger.warn(`Failed to set socket group ownership to ${socketGroup}: ${error.message}`);
       }
     }
   } catch (error: any) {
-    console.warn(`Failed to set socket permissions/ownership: ${error.message}`);
+    daemonLogger.warn(`Failed to set socket permissions/ownership: ${error.message}`);
   }
 });
 

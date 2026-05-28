@@ -46,6 +46,7 @@ describe('Config Management', () => {
       expect(config.sandbox.image).toContain('gemini-cli/sandbox');
       expect(config.daemon?.socketGroup).toBe('afk-coder-users');
       expect(config.daemon?.agent).toBe('gemini');
+      expect(config.daemon?.logLevel).toBe('info');
     });
 
     it('should return merged config if config file exists', () => {
@@ -54,13 +55,15 @@ describe('Config Management', () => {
         ...mockConfig,
         daemon: {
           ...mockConfig.daemon,
-          agent: 'aider'
+          agent: 'aider',
+          logLevel: 'debug'
         }
       }));
       const config = manager.loadConfig();
       expect(config.sandbox.image).toBe('test-image');
       expect(config.daemon?.socketGroup).toBe('custom-group');
       expect(config.daemon?.agent).toBe('aider');
+      expect(config.daemon?.logLevel).toBe('debug');
       expect(config.auth?.clientId).toBe('test-client-id');
     });
 

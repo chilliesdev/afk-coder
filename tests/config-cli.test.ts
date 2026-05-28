@@ -113,4 +113,21 @@ describe('Config CLI', () => {
       expect(output).toContain('Opening configuration in nano...');
     }
   });
+
+  test('config set daemon.logLevel accepts and normalizes valid log levels', () => {
+    const output1 = runCli('config set daemon.logLevel debug');
+    expect(output1).toContain('Successfully set "daemon.logLevel" to: debug');
+    const val1 = runCli('config get daemon.logLevel');
+    expect(val1.trim()).toBe('debug');
+
+    const output2 = runCli('config set daemon.logLevel WARN');
+    expect(output2).toContain('Successfully set "daemon.logLevel" to: warn');
+    const val2 = runCli('config get daemon.logLevel');
+    expect(val2.trim()).toBe('warn');
+  });
+
+  test('config set daemon.logLevel rejects invalid log levels', () => {
+    const output = runCli('config set daemon.logLevel invalid-level');
+    expect(output).toContain('Error: daemon.logLevel must be one of: error, warn, info, http, verbose, debug, silly');
+  });
 });

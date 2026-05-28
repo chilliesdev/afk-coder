@@ -18,6 +18,7 @@ export interface Config {
     socketPath?: string;
     agent?: string;
     logDir?: string;
+    logLevel?: string;
     logRotation?: {
       maxSize?: number;
       maxFiles?: number;
@@ -44,6 +45,7 @@ const DEFAULT_CONFIG: Config = {
     socketGroup: 'afk-coder-users',
     socketPath: '/tmp/afk-coder.sock',
     agent: 'gemini',
+    logLevel: 'info',
     logRotation: {
       maxSize: 10 * 1024 * 1024, // 10MB
       maxFiles: 5,

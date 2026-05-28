@@ -7,7 +7,8 @@ jest.mock('net');
 jest.mock('fs');
 jest.mock('child_process');
 jest.mock('../src/common/config', () => ({
-  ConfigManager: jest.fn()
+  ConfigManager: jest.fn(),
+  getLogsDir: jest.fn().mockReturnValue('/tmp/afk-coder-logs')
 }));
 
 describe('Daemon Socket Group Ownership', () => {

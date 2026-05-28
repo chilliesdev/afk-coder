@@ -695,6 +695,16 @@ configCmd
       process.exit(1);
     }
 
+    if (key === 'daemon.logLevel') {
+      const allowedLevels = ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'];
+      const valStr = String(coercedValue).toLowerCase();
+      if (!allowedLevels.includes(valStr)) {
+        console.error(`Error: daemon.logLevel must be one of: ${allowedLevels.join(', ')}`);
+        process.exit(1);
+      }
+      coercedValue = valStr;
+    }
+
     if (key === 'auth.scopes') {
       if (Array.isArray(coercedValue)) {
         coercedValue = coercedValue.map(String);

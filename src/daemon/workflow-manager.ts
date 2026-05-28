@@ -68,7 +68,7 @@ export class WorkflowManager extends EventEmitter {
     }
 
     const logger = winston.createLogger({
-      level: 'info',
+      level: config.daemon?.logLevel || 'info',
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.json()
