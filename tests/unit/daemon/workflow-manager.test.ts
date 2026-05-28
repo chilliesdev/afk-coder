@@ -6,7 +6,7 @@ import { Agent } from '../../../src/daemon/agent';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'node:child_process';
-import { MockGitClient } from '../../../src/common/git';
+import { MockGitClient } from '../../helpers/mock-git-client';
 import { TaskValidator } from '../../../src/common/validation';
 import * as winston from 'winston';
 

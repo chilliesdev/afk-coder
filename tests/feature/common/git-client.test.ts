@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
-import { ShellGitClient, MockGitClient } from '../../../src/common/git';
+import { ShellGitClient } from '../../../src/common/git';
+import { MockGitClient } from '../../helpers/mock-git-client';
 
 describe('GitClient', () => {
   describe('MockGitClient', () => {
