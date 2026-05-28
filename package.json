@@ -14,6 +14,8 @@
     "start": "node dist/src/cli/index.js",
     "daemon": "node dist/src/daemon/index.js",
     "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:feature": "jest tests/feature",
     "lint": "eslint 'src/**/*.{ts,js}'",
     "lint:fix": "eslint 'src/**/*.{ts,js}' --fix"
   },
