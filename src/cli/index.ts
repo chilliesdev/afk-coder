@@ -12,11 +12,17 @@ import { RemoveCommand } from './commands/remove';
 import { LogsCommand } from './commands/logs';
 import { ConfigCommand } from './commands/config';
 
+import { ShellGitClient } from '../common/git';
+
 registerCleanupHandlers();
 
 const client = new DaemonClient();
 const validator = new TaskValidator();
-const context = { client, validator };
+const context = { 
+  client, 
+  validator,
+  gitClientFactory: (dir: string) => new ShellGitClient(dir)
+};
 
 export const program = new Command();
 

@@ -29,47 +29,14 @@ describe('init command progress feedback', () => {
   });
 
   it('should handle milestones and update spinner', async () => {
-    // Re-import to ensure mocks are applied
     const { DaemonClient: MockClient } = require('../../../../src/cli/client');
-    const { Spinner: MockSpinner } = require('../../../../src/cli/ui');
+    const { InitCommand } = require('../../../../src/cli/commands/init');
     
-    // Setup the command and action manually for the test
-    const action = async (options: any) => {
-        const spinner = new MockSpinner('Initializing...');
-        try {
-          const dir = path.resolve(options.dir);
-          const { CONFIG_DIR } = await import('../../../../src/common/config');
-    
-          const client = new MockClient();
-          const response = await client.sendCommand('init', {
-            dir,
-            prd: options.prd,
-            force: options.force,
-            configDir: CONFIG_DIR
-          }, (milestone: any) => {
-            switch (milestone.status) {
-              case MILESTONE_STATUS.STARTING:
-                spinner.start(milestone.message);
-                break;
-              case MILESTONE_STATUS.INFO:
-                spinner.update(milestone.message);
-                break;
-              case MILESTONE_STATUS.COMPLETED:
-                spinner.stop(milestone.message, true);
-                break;
-              case MILESTONE_STATUS.FAILED:
-                spinner.stop(milestone.message, false);
-                break;
-            }
-          });
-    
-          if (!response.success) {
-            spinner.stop(`Failed: ${response.message}`, false);
-          }
-        } catch (error: any) {
-          spinner.stop(`Error: ${error.message}`, false);
-        }
-      };
+    const client = new MockClient();
+    const initCommand = new InitCommand({
+      client,
+      validator: { validateWorkflowDir: jest.fn() }
+    });
 
     mockSendCommand.mockImplementation(async (cmd, args, onMilestone) => {
       onMilestone({ type: MILESTONE_TYPE, status: MILESTONE_STATUS.STARTING, message: 'Starting...' });
@@ -78,7 +45,7 @@ describe('init command progress feedback', () => {
       return { success: true };
     });
 
-    await action({ dir: '.', prd: 'PRD.md', force: false });
+    await initCommand.execute({ dir: '.', prd: 'PRD.md', force: false });
 
     expect(mockSpinner.start).toHaveBeenCalledWith('Starting...');
     expect(mockSpinner.update).toHaveBeenCalledWith('Working...');
@@ -87,44 +54,13 @@ describe('init command progress feedback', () => {
 
   it('should handle failure milestone', async () => {
     const { DaemonClient: MockClient } = require('../../../../src/cli/client');
-    const { Spinner: MockSpinner } = require('../../../../src/cli/ui');
+    const { InitCommand } = require('../../../../src/cli/commands/init');
 
-    const action = async (options: any) => {
-        const spinner = new MockSpinner('Initializing...');
-        try {
-          const dir = path.resolve(options.dir);
-          const { CONFIG_DIR } = await import('../../../../src/common/config');
-    
-          const client = new MockClient();
-          const response = await client.sendCommand('init', {
-            dir,
-            prd: options.prd,
-            force: options.force,
-            configDir: CONFIG_DIR
-          }, (milestone: any) => {
-            switch (milestone.status) {
-              case MILESTONE_STATUS.STARTING:
-                spinner.start(milestone.message);
-                break;
-              case MILESTONE_STATUS.INFO:
-                spinner.update(milestone.message);
-                break;
-              case MILESTONE_STATUS.COMPLETED:
-                spinner.stop(milestone.message, true);
-                break;
-              case MILESTONE_STATUS.FAILED:
-                spinner.stop(milestone.message, false);
-                break;
-            }
-          });
-    
-          if (!response.success) {
-            spinner.stop(`Failed: ${response.message}`, false);
-          }
-        } catch (error: any) {
-          spinner.stop(`Error: ${error.message}`, false);
-        }
-      };
+    const client = new MockClient();
+    const initCommand = new InitCommand({
+      client,
+      validator: { validateWorkflowDir: jest.fn() }
+    });
 
     mockSendCommand.mockImplementation(async (cmd, args, onMilestone) => {
       onMilestone({ type: MILESTONE_TYPE, status: MILESTONE_STATUS.STARTING, message: 'Starting...' });
@@ -132,7 +68,7 @@ describe('init command progress feedback', () => {
       return { success: false, message: 'Failed!' };
     });
 
-    await action({ dir: '.', prd: 'PRD.md', force: false });
+    await initCommand.execute({ dir: '.', prd: 'PRD.md', force: false });
 
     expect(mockSpinner.start).toHaveBeenCalledWith('Starting...');
     expect(mockSpinner.stop).toHaveBeenCalledWith('Failed!', false);

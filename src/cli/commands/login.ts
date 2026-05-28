@@ -7,87 +7,92 @@ export class LoginCommand extends BaseCommand {
       .command('login')
       .description('Initiate Google OAuth 2.0 flow')
       .action(async () => {
-        const { OAuth2Client } = await import('google-auth-library');
-        const { ConfigManager } = await import('../../common/config');
-        const http = await import('node:http');
-        const url = await import('node:url');
-        const readline = await import('node:readline');
+        await this.execute();
+      });
+  }
 
-        const configManager = new ConfigManager();
-        const saveTokens = configManager.saveTokens.bind(configManager);
-        const loadConfig = configManager.loadConfig.bind(configManager);
-        const saveConfig = configManager.saveConfig.bind(configManager);
+  async execute(): Promise<void> {
+    const { OAuth2Client } = await import('google-auth-library');
+    const { ConfigManager } = await import('../../common/config');
+    const http = await import('node:http');
+    const url = await import('node:url');
+    const readline = await import('node:readline');
 
-        const config = loadConfig();
-        const envClientId = process.env.GOOGLE_CLIENT_ID;
-        const envClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-        
-        const clientId = envClientId || config.auth?.clientId;
-        const clientSecret = envClientSecret || config.auth?.clientSecret;
-        const scopes = config.auth?.scopes || ['https://www.googleapis.com/auth/cloud-platform'];
+    const configManager = new ConfigManager();
+    const saveTokens = configManager.saveTokens.bind(configManager);
+    const loadConfig = configManager.loadConfig.bind(configManager);
+    const saveConfig = configManager.saveConfig.bind(configManager);
 
-        if (!clientId || !clientSecret) {
-          console.error('Error: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set via environment variables or in config.json.');
-          console.log('Example: GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy afk login');
-          return;
-        }
+    const config = loadConfig();
+    const envClientId = process.env.GOOGLE_CLIENT_ID;
+    const envClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    const clientId = envClientId || config.auth?.clientId;
+    const clientSecret = envClientSecret || config.auth?.clientSecret;
+    const scopes = config.auth?.scopes || ['https://www.googleapis.com/auth/cloud-platform'];
 
-        // Save credentials to config if provided via env and they differ from current config
-        if ((envClientId || envClientSecret) && (envClientId !== config.auth?.clientId || envClientSecret !== config.auth?.clientSecret)) {
-          config.auth = {
-            ...config.auth,
-            clientId: clientId,
-            clientSecret: clientSecret
-          };
-          saveConfig(config);
-          console.log('Updated Google Cloud credentials in config.json');
-        }
+    if (!clientId || !clientSecret) {
+      console.error('Error: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set via environment variables or in config.json.');
+      console.log('Example: GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy afk login');
+      return;
+    }
 
-        const oAuth2Client = new OAuth2Client({
-          clientId,
-          clientSecret,
-          redirectUri: config.auth?.redirectUri
-        });
+    // Save credentials to config if provided via env and they differ from current config
+    if ((envClientId || envClientSecret) && (envClientId !== config.auth?.clientId || envClientSecret !== config.auth?.clientSecret)) {
+      config.auth = {
+        ...config.auth,
+        clientId: clientId,
+        clientSecret: clientSecret
+      };
+      saveConfig(config);
+      console.log('Updated Google Cloud credentials in config.json');
+    }
 
-        const authUrl = oAuth2Client.generateAuthUrl({
-          access_type: 'offline',
-          scope: scopes,
-          prompt: 'consent',
-        });
+    const oAuth2Client = new OAuth2Client({
+      clientId,
+      clientSecret,
+      redirectUri: config.auth?.redirectUri
+    });
 
-        console.log('Authorize this app by visiting this url:', authUrl);
+    const authUrl = oAuth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      prompt: 'consent',
+    });
 
-        let isFinished = false;
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
+    console.log('Authorize this app by visiting this url:', authUrl);
 
-        const finishLogin = async (code: string) => {
-          if (isFinished) return;
-          isFinished = true;
-          rl.close();
-          server.close();
+    let isFinished = false;
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
 
-          try {
-            const { tokens } = await oAuth2Client.getToken(code);
-            oAuth2Client.setCredentials(tokens);
-            saveTokens(tokens);
-            console.log('Login successful! Tokens saved.');
-            process.exit(0);
-          } catch (error: any) {
-            console.error('Error retrieving access token:', error.message);
-            process.exit(1);
-          }
-        };
+    const finishLogin = async (code: string) => {
+      if (isFinished) return;
+      isFinished = true;
+      rl.close();
+      server.close();
 
-        const server = http.createServer(async (req, res) => {
-          try {
-            const reqUrl = new url.URL(req.url!, 'http://localhost:3000');
-            const code = reqUrl.searchParams.get('code');
-            const error = reqUrl.searchParams.get('error');
+      try {
+        const { tokens } = await oAuth2Client.getToken(code);
+        oAuth2Client.setCredentials(tokens);
+        saveTokens(tokens);
+        console.log('Login successful! Tokens saved.');
+        process.exit(0);
+      } catch (error: any) {
+        console.error('Error retrieving access token:', error.message);
+        process.exit(1);
+      }
+    };
 
-            const htmlTemplate = (title: string, message: string, script: string = '') => `
+    const server = http.createServer(async (req, res) => {
+      try {
+        const reqUrl = new url.URL(req.url!, 'http://localhost:3000');
+        const code = reqUrl.searchParams.get('code');
+        const error = reqUrl.searchParams.get('error');
+
+        const htmlTemplate = (title: string, message: string, script: string = '') => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,39 +117,91 @@ export class LoginCommand extends BaseCommand {
 </body>
 </html>`;
 
-            if (code) {
-              res.writeHead(200, { 'Content-Type': 'text/html' });
-              res.end(htmlTemplate(
-                'Authentication Successful',
-                'You have successfully authenticated with Google. You can now close this window and return to your terminal.',
-                '<button class="btn" onclick="window.close()" aria-label="Close window">Close Window</button><script>setTimeout(() => window.close(), 3000);</script>'
-              ));
-              await finishLogin(code);
-              return;
-            }
-            
-            if (error) {
-              res.writeHead(400, { 'Content-Type': 'text/html' });
-              res.end(htmlTemplate(
-                'Authentication Failed',
-                `An error occurred during authentication: <strong>${error}</strong>. Please check your console for details.`,
-                '<button class="btn" onclick="window.close()" aria-label="Close window">Close Window</button>'
-              ));
-              if (!isFinished) {
-                isFinished = true;
-                rl.close();
-                server.close();
-                process.exit(1);
-              }
-              return;
-            }
-            
-            res.writeHead(404);
-            res.end();
-          } catch (error: any) {
-            console.error('Error retrieving access token', error.message);
-            res.writeHead(500);
-            res.end('Authentication failed.');
+        if (code) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(htmlTemplate(
+            'Authentication Successful',
+            'You have successfully authenticated with Google. You can now close this window and return to your terminal.',
+            '<button class="btn" onclick="window.close()" aria-label="Close window">Close Window</button><script>setTimeout(() => window.close(), 3000);</script>'
+          ));
+          await finishLogin(code);
+          return;
+        }
+        
+        if (error) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end(htmlTemplate(
+            'Authentication Failed',
+            `An error occurred during authentication: <strong>${error}</strong>. Please check your console for details.`,
+            '<button class="btn" onclick="window.close()" aria-label="Close window">Close Window</button>'
+          ));
+          if (!isFinished) {
+            isFinished = true;
+            rl.close();
+            server.close();
+            process.exit(1);
+          }
+          return;
+        }
+        
+        res.writeHead(404);
+        res.end();
+      } catch (error: any) {
+        console.error('Error retrieving access token', error.message);
+        res.writeHead(500);
+        res.end('Authentication failed.');
+        if (!isFinished) {
+          isFinished = true;
+          rl.close();
+          server.close();
+          process.exit(1);
+        }
+      }
+    });
+
+    server.on('error', (err: any) => {
+      rl.close();
+      if (err.code === 'EADDRINUSE') {
+        console.error('\n❌ Error: Port 3000 is already in use by another process.');
+        console.error('💡 Tip: Free up the port by running "npx kill-port 3000" and try logging in again.');
+        process.exit(1);
+      } else {
+        console.error('\n❌ Local server error:', err.message);
+        process.exit(1);
+      }
+    });
+
+    server.listen(3000, () => {
+      console.log('Waiting for authorization...');
+      rl.question('\nIf running on a remote server, paste the redirect URL here:\n> ', async (input) => {
+        if (isFinished) return;
+        const trimmed = input.trim();
+        if (!trimmed) {
+          if (!isFinished) {
+            isFinished = true;
+            rl.close();
+            server.close();
+            process.exit(0);
+          }
+          return;
+        }
+
+        try {
+          let code: string | null = null;
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            const parsedUrl = new url.URL(trimmed);
+            code = parsedUrl.searchParams.get('code');
+          } else if (trimmed.includes('?code=')) {
+            const parsedUrl = new url.URL('http://' + trimmed);
+            code = parsedUrl.searchParams.get('code');
+          } else {
+            code = trimmed;
+          }
+
+          if (code) {
+            await finishLogin(code);
+          } else {
+            console.error('Could not extract authorization code from input.');
             if (!isFinished) {
               isFinished = true;
               rl.close();
@@ -152,69 +209,16 @@ export class LoginCommand extends BaseCommand {
               process.exit(1);
             }
           }
-        });
-
-        server.on('error', (err: any) => {
-          rl.close();
-          if (err.code === 'EADDRINUSE') {
-            console.error('\n❌ Error: Port 3000 is already in use by another process.');
-            console.error('💡 Tip: Free up the port by running "npx kill-port 3000" and try logging in again.');
-            process.exit(1);
-          } else {
-            console.error('\n❌ Local server error:', err.message);
+        } catch (error: any) {
+          console.error('Invalid URL or code input:', error.message);
+          if (!isFinished) {
+            isFinished = true;
+            rl.close();
+            server.close();
             process.exit(1);
           }
-        });
-
-        server.listen(3000, () => {
-          console.log('Waiting for authorization...');
-          rl.question('\nIf running on a remote server, paste the redirect URL here:\n> ', async (input) => {
-            if (isFinished) return;
-            const trimmed = input.trim();
-            if (!trimmed) {
-              if (!isFinished) {
-                isFinished = true;
-                rl.close();
-                server.close();
-                process.exit(0);
-              }
-              return;
-            }
-
-            try {
-              let code: string | null = null;
-              if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-                const parsedUrl = new url.URL(trimmed);
-                code = parsedUrl.searchParams.get('code');
-              } else if (trimmed.includes('?code=')) {
-                const parsedUrl = new url.URL('http://' + trimmed);
-                code = parsedUrl.searchParams.get('code');
-              } else {
-                code = trimmed;
-              }
-
-              if (code) {
-                await finishLogin(code);
-              } else {
-                console.error('Could not extract authorization code from input.');
-                if (!isFinished) {
-                  isFinished = true;
-                  rl.close();
-                  server.close();
-                  process.exit(1);
-                }
-              }
-            } catch (error: any) {
-              console.error('Invalid URL or code input:', error.message);
-              if (!isFinished) {
-                isFinished = true;
-                rl.close();
-                server.close();
-                process.exit(1);
-              }
-            }
-          });
-        });
+        }
       });
+    });
   }
 }

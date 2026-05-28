@@ -7,16 +7,20 @@ export class KillCommand extends BaseCommand {
       .command('kill <workflow_name>')
       .description('Terminate a workflow')
       .action(async (workflowName) => {
-        try {
-          const response = await this.context.client.sendCommand('kill', { name: workflowName });
-          if (!response.success) {
-            console.error(`Failed to kill workflow: ${response.message}`);
-            return;
-          }
-          console.log(`Workflow ${workflowName} killed.`);
-        } catch (error: any) {
-          console.error(error.message);
-        }
+        await this.execute(workflowName);
       });
+  }
+
+  async execute(workflowName: string): Promise<void> {
+    try {
+      const response = await this.context.client.sendCommand('kill', { name: workflowName });
+      if (!response.success) {
+        console.error(`Failed to kill workflow: ${response.message}`);
+        return;
+      }
+      console.log(`Workflow ${workflowName} killed.`);
+    } catch (error: any) {
+      console.error(error.message);
+    }
   }
 }
