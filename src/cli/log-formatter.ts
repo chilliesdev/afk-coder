@@ -79,6 +79,12 @@ export class LogFormatter {
       parts.push(this.colorize(`[${level}]`, color));
     }
 
+    // Origin (workflow or service)
+    const origin = log.workflow || log.service;
+    if (origin) {
+      parts.push(this.colorize(`[${origin}]`, 'gray'));
+    }
+
     // 3. Message
     if (log.message) {
       parts.push(log.message);
@@ -90,6 +96,7 @@ export class LogFormatter {
     delete metadata.level;
     delete metadata.message;
     delete metadata.workflow;
+    delete metadata.service;
 
     if (Object.keys(metadata).length > 0) {
       const metaStr = this.formatMetadata(metadata);

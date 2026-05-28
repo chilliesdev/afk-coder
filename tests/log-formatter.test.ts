@@ -16,7 +16,7 @@ describe('LogFormatter', () => {
       workflow: 'test-wf'
     });
     const result = formatter.format(line);
-    expect(result).toBe('[2026-05-27 20:48:52] [INFO] Workflow started');
+    expect(result).toBe('[2026-05-27 20:48:52] [INFO] [test-wf] Workflow started');
   });
 
   it('should handle logs with small metadata', () => {
@@ -28,7 +28,7 @@ describe('LogFormatter', () => {
       dir: '/tmp/test'
     });
     const result = formatter.format(line);
-    expect(result).toBe('[2026-05-27 20:48:52] [INFO] Workflow started { dir: \'/tmp/test\' }');
+    expect(result).toBe('[2026-05-27 20:48:52] [INFO] [test-wf] Workflow started { dir: \'/tmp/test\' }');
   });
 
   it('should handle logs with large metadata', () => {

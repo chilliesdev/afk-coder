@@ -44,7 +44,7 @@ describe('afk logs command integration', () => {
 
     await runCommand(['logs', 'test-wf', '--no-color']);
 
-    expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('[2026-05-27 20:48:52] [INFO] Hello world\n'));
+    expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('[2026-05-27 20:48:52] [INFO] [test-wf] Hello world\n'));
   });
 
   it('should show raw JSON when --json is used', async () => {
@@ -104,11 +104,42 @@ describe('afk logs command integration', () => {
 
     expect(mockSendCommand).toHaveBeenCalledWith(
       'logs',
-      { name: 'test-wf', tail: 20, follow: true },
+      { name: 'test-wf', tail: 20, follow: true, daemon: undefined },
       undefined,
       expect.any(Function)
     );
     expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('[INFO] live line 1\n'));
     expect(stdoutSpy).toHaveBeenCalledWith('live line 2 (not json)\n');
+  });
+
+  it('should request consolidated logs (no workflow specified)', async () => {
+    mockSendCommand.mockResolvedValue({
+      success: true,
+      data: { content: 'consolidated logs\n', nextOffset: 100 }
+    });
+
+    await runCommand(['logs']);
+
+    expect(mockSendCommand).toHaveBeenCalledWith('logs', { name: undefined, tail: undefined, daemon: undefined });
+    expect(stdoutSpy).toHaveBeenCalledWith('consolidated logs\n');
+  });
+
+  it('should request daemon logs when --daemon is specified', async () => {
+    mockSendCommand.mockResolvedValue({
+      success: true,
+      data: { content: 'daemon logs\n', nextOffset: 100 }
+    });
+
+    await runCommand(['logs', '--daemon']);
+
+    expect(mockSendCommand).toHaveBeenCalledWith('logs', { name: undefined, tail: undefined, daemon: true });
+    expect(stdoutSpy).toHaveBeenCalledWith('daemon logs\n');
+  });
+
+  it('should output error when both workflow name and --daemon are specified', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await runCommand(['logs', 'some-workflow', '--daemon']);
+    expect(errorSpy).toHaveBeenCalledWith('Error: Cannot specify both a workflow name and --daemon');
+    errorSpy.mockRestore();
   });
 });

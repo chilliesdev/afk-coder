@@ -322,37 +322,82 @@ export class WorkflowManager extends EventEmitter {
     return await agent.generateTasks(args.dir, args.prd, args.force, args.configDir, onMilestone);
   }
 
-  getLogs(name: string, options: { tail?: number, offset?: number } = {}) {
-    const executor = this.workflows.get(name);
-    if (!executor) {
-      throw new Error(`Workflow ${name} not found`);
-    }
+  getLogs(name?: string, options: { tail?: number, offset?: number, daemon?: boolean } = {}) {
     const { ConfigManager, getLogsDir } = require('../common/config');
-    const configManager = new ConfigManager(executor.configDir);
+    let configDir: string | undefined = undefined;
+    if (name && name !== 'daemon') {
+      const executor = this.workflows.get(name);
+      if (executor) {
+        configDir = executor.configDir;
+      }
+    }
+    const configManager = new ConfigManager(configDir);
     const config = configManager.loadConfig();
     const logsDir = getLogsDir(config);
-    const logFile = path.join(logsDir, `${name}.json.log`);
-    if (!fs.existsSync(logFile)) {
+
+    if (options.daemon || name === 'daemon') {
+      const logFile = path.join(logsDir, 'daemon.json.log');
+      if (!fs.existsSync(logFile)) {
+        return { content: 'No daemon logs found.', nextOffset: 0 };
+      }
+      return this.readSingleLogFile(logFile, undefined, options);
+    }
+
+    if (name) {
+      const logFile = path.join(logsDir, `${name}.json.log`);
+      if (!fs.existsSync(logFile)) {
+        return { content: 'No logs found.', nextOffset: 0 };
+      }
+      return this.readSingleLogFile(logFile, name, options);
+    }
+
+    // Read all workflow log files
+    if (!fs.existsSync(logsDir)) {
+      return { content: 'No logs found.', nextOffset: 0 };
+    }
+    const files = fs.readdirSync(logsDir);
+    const logFiles = files.filter(f => f.endsWith('.json.log') && f !== 'daemon.json.log');
+    if (logFiles.length === 0) {
       return { content: 'No logs found.', nextOffset: 0 };
     }
 
+    let allLines: { line: string, timestamp: number }[] = [];
+    for (const file of logFiles) {
+      const logFile = path.join(logsDir, file);
+      allLines.push(...this.readLogLines(logFile));
+    }
+
+    // Sort chronologically by timestamp
+    allLines.sort((a, b) => a.timestamp - b.timestamp);
+
+    let resultLines = allLines.map(l => l.line);
+    if (options.tail) {
+      resultLines = resultLines.slice(-options.tail);
+    }
+
+    const content = resultLines.join('\n') + (resultLines.length > 0 ? '\n' : '');
+    return { content, nextOffset: allLines.length };
+  }
+
+  private readSingleLogFile(logFile: string, filterName?: string, options: { tail?: number, offset?: number } = {}) {
+    const stats = fs.statSync(logFile);
     const filterLogs = (rawContent: string): string => {
       const lines = rawContent.split('\n');
       const filtered = lines.filter(line => {
         const trimmed = line.trim();
         if (!trimmed) return false;
+        if (!filterName) return true;
         try {
           const parsed = JSON.parse(trimmed);
-          return parsed.workflow === name;
+          return parsed.workflow === filterName;
         } catch {
-          return trimmed.includes(name);
+          return trimmed.includes(filterName);
         }
       });
       return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
     };
 
     if (options.offset !== undefined) {
-      const stats = fs.statSync(logFile);
       if (options.offset >= stats.size) {
         return { content: '', nextOffset: stats.size };
       }
@@ -365,7 +410,6 @@ export class WorkflowManager extends EventEmitter {
     }
 
     const content = fs.readFileSync(logFile, 'utf8');
-    const stats = fs.statSync(logFile);
     const filteredContent = filterLogs(content);
     if (options.tail) {
       const lines = filteredContent.trim().split('\n');
@@ -373,6 +417,46 @@ export class WorkflowManager extends EventEmitter {
       return { content: filteredLines.slice(-options.tail).join('\n') + (filteredLines.length > 0 ? '\n' : ''), nextOffset: stats.size };
     }
     return { content: filteredContent, nextOffset: stats.size };
+  }
+
+  private readLogLines(logFile: string, filterName?: string): { line: string, timestamp: number }[] {
+    if (!fs.existsSync(logFile)) return [];
+    try {
+      const content = fs.readFileSync(logFile, 'utf8');
+      const rawLines = content.split('\n');
+      const parsedLines: { line: string, timestamp: number }[] = [];
+      let lastTimestamp = 0;
+      for (const rawLine of rawLines) {
+        const trimmed = rawLine.trim();
+        if (!trimmed) continue;
+        
+        let timestamp = lastTimestamp;
+        let isMatch = true;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (filterName && parsed.workflow !== filterName) {
+            isMatch = false;
+          }
+          if (parsed.timestamp) {
+            const date = new Date(parsed.timestamp);
+            if (!isNaN(date.getTime())) {
+              timestamp = date.getTime();
+              lastTimestamp = timestamp;
+            }
+          }
+        } catch {
+          if (filterName && !trimmed.includes(filterName)) {
+            isMatch = false;
+          }
+        }
+        if (isMatch) {
+          parsedLines.push({ line: trimmed, timestamp });
+        }
+      }
+      return parsedLines;
+    } catch {
+      return [];
+    }
   }
 
   private emitMilestone(

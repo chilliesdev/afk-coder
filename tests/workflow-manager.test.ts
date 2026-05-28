@@ -1219,6 +1219,53 @@ describe('WorkflowManager', () => {
 
       await workflowManager.killWorkflow('wf-filter-1');
     });
+
+    it('should retrieve consolidated logs across all workflow files when workflow name is omitted', async () => {
+      const logsDir = path.join(testStateDir, 'afk-coder', 'logs');
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+
+      const wf1LogFile = path.join(logsDir, 'wf-1.json.log');
+      const wf2LogFile = path.join(logsDir, 'wf-2.json.log');
+      const daemonLogFile = path.join(logsDir, 'daemon.json.log');
+
+      const wf1Entries = [
+        JSON.stringify({ timestamp: '2026-05-28T10:00:00.000Z', workflow: 'wf-1', message: 'wf1 first' }),
+        JSON.stringify({ timestamp: '2026-05-28T10:02:00.000Z', workflow: 'wf-1', message: 'wf1 second' })
+      ].join('\n') + '\n';
+
+      const wf2Entries = [
+        JSON.stringify({ timestamp: '2026-05-28T10:01:00.000Z', workflow: 'wf-2', message: 'wf2 first' })
+      ].join('\n') + '\n';
+
+      const daemonEntries = [
+        JSON.stringify({ timestamp: '2026-05-28T09:59:00.000Z', service: 'afk-coder-daemon', message: 'daemon log' })
+      ].join('\n') + '\n';
+
+      fs.writeFileSync(wf1LogFile, wf1Entries);
+      fs.writeFileSync(wf2LogFile, wf2Entries);
+      fs.writeFileSync(daemonLogFile, daemonEntries);
+
+      // Fetching consolidated logs (no name, daemon: false)
+      const consolidated = workflowManager.getLogs(undefined);
+      expect(consolidated.content).toContain('wf1 first');
+      expect(consolidated.content).toContain('wf2 first');
+      expect(consolidated.content).toContain('wf1 second');
+      expect(consolidated.content).not.toContain('daemon log');
+
+      // Verify they are sorted chronologically
+      const lines = consolidated.content.trim().split('\n');
+      expect(lines.length).toBe(3);
+      expect(JSON.parse(lines[0]).message).toBe('wf1 first');
+      expect(JSON.parse(lines[1]).message).toBe('wf2 first');
+      expect(JSON.parse(lines[2]).message).toBe('wf1 second');
+
+      // Fetching daemon logs explicitly
+      const daemonLogs = workflowManager.getLogs(undefined, { daemon: true });
+      expect(daemonLogs.content).toContain('daemon log');
+      expect(daemonLogs.content).not.toContain('wf1 first');
+    });
   });
 
   describe('Log Rotation and Retention Limits', () => {

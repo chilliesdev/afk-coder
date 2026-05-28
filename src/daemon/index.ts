@@ -174,15 +174,20 @@ const server = net.createServer((socket) => {
           break;
         }
         case 'logs': {
+          const isDaemon = request.args.daemon || request.args.name === 'daemon';
           if (request.args.follow) {
-            const executor = workflowManager.getExecutor(request.args.name);
-            if (!executor) {
-              throw new Error(`Workflow ${request.args.name} not found`);
+            if (!isDaemon && request.args.name) {
+              const executor = workflowManager.getExecutor(request.args.name);
+              if (!executor) {
+                throw new Error(`Workflow ${request.args.name} not found`);
+              }
             }
+
             keepOpen = true;
             socket.write(JSON.stringify({ success: true }) + '\n');
-            const initialLogs = workflowManager.getLogs(request.args.name, {
-              tail: request.args.tail ? Number.parseInt(request.args.tail) : 20
+            const initialLogs = workflowManager.getLogs(isDaemon ? 'daemon' : request.args.name, {
+              tail: request.args.tail ? Number.parseInt(request.args.tail) : 20,
+              daemon: isDaemon
             });
             if (initialLogs && initialLogs.content) {
               const lines = initialLogs.content.split('\n');
@@ -193,38 +198,68 @@ const server = net.createServer((socket) => {
               }
             }
 
-            const isRunning = executor.status !== 'Done' && 
-                              executor.status !== 'Killed' && 
-                              !executor.status.startsWith('Failed');
-
-            if (isRunning) {
-              const logListener = (name: string, info: any) => {
-                if (name === request.args.name) {
-                  socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
-                }
+            if (isDaemon) {
+              const logListener = (info: any) => {
+                socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
               };
-              workflowManager.on('log', logListener);
-
-              const unsubscribeFinish = executor.onFinished(() => {
-                cleanup();
-                socket.end();
-              });
+              daemonLogger.on('data', logListener);
 
               const cleanup = () => {
-                workflowManager.off('log', logListener);
-                unsubscribeFinish();
+                daemonLogger.off('data', logListener);
               };
 
               socket.on('close', cleanup);
               socket.on('error', cleanup);
+            } else if (request.args.name) {
+              const executor = workflowManager.getExecutor(request.args.name);
+              const isRunning = executor &&
+                                executor.status !== 'Done' && 
+                                executor.status !== 'Killed' && 
+                                !executor.status.startsWith('Failed');
+
+              if (isRunning) {
+                const logListener = (name: string, info: any) => {
+                  if (name === request.args.name) {
+                    socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
+                  }
+                };
+                workflowManager.on('log', logListener);
+
+                const unsubscribeFinish = executor.onFinished(() => {
+                  cleanup();
+                  socket.end();
+                });
+
+                const cleanup = () => {
+                  workflowManager.off('log', logListener);
+                  unsubscribeFinish();
+                };
+
+                socket.on('close', cleanup);
+                socket.on('error', cleanup);
+              } else {
+                socket.end();
+              }
             } else {
-              socket.end();
+              // Consolidated logs follow mode - stream indefinitely from all workflows
+              const logListener = (name: string, info: any) => {
+                socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
+              };
+              workflowManager.on('log', logListener);
+
+              const cleanup = () => {
+                workflowManager.off('log', logListener);
+              };
+
+              socket.on('close', cleanup);
+              socket.on('error', cleanup);
             }
             break;
           }
-          response = { success: true, data: workflowManager.getLogs(request.args.name, {
+          response = { success: true, data: workflowManager.getLogs(isDaemon ? 'daemon' : request.args.name, {
             tail: request.args.tail ? Number.parseInt(request.args.tail) : undefined,
-            offset: request.args.offset === undefined ? undefined : Number.parseInt(request.args.offset)
+            offset: request.args.offset === undefined ? undefined : Number.parseInt(request.args.offset),
+            daemon: isDaemon
           }) };
           break;
         }

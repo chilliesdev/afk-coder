@@ -560,15 +560,21 @@ program
   });
 
 program
-  .command('logs <workflow_name>')
+  .command('logs [workflow_name]')
   .description('View workflow logs')
   .option('-f, --follow', 'Stream logs')
   .option('--tail <lines>', 'Number of lines to show')
   .option('--json', 'Show logs in raw JSON format')
   .option('--raw', 'Show logs as they are stored (no formatting)')
   .option('--no-color', 'Disable color output')
+  .option('--daemon', 'Show daemon logs')
   .action(async (workflowName, options) => {
     try {
+      if (workflowName && options.daemon) {
+        console.error('Error: Cannot specify both a workflow name and --daemon');
+        return;
+      }
+
       const formatter = new LogFormatter({
         color: options.color !== false,
         json: options.json,
@@ -586,13 +592,20 @@ program
       };
 
       if (options.follow) {
-        console.log(`Following logs for ${workflowName}... (Ctrl+C to stop)`);
+        if (options.daemon) {
+          console.log('Following daemon logs... (Ctrl+C to stop)');
+        } else if (workflowName) {
+          console.log(`Following logs for ${workflowName}... (Ctrl+C to stop)`);
+        } else {
+          console.log('Following logs for all workflows... (Ctrl+C to stop)');
+        }
         const response = await sendCommand(
           'logs',
           {
             name: workflowName,
             tail: options.tail || 20,
-            follow: true
+            follow: true,
+            daemon: options.daemon
           },
           undefined,
           (logLine) => {
@@ -603,7 +616,7 @@ program
           console.error(`Failed to stream logs: ${response.message}`);
         }
       } else {
-        const response = await sendCommand('logs', { name: workflowName, tail: options.tail });
+        const response = await sendCommand('logs', { name: workflowName, tail: options.tail, daemon: options.daemon });
         if (!response.success) {
           console.error(`Failed to get logs: ${response.message}`);
           return;
