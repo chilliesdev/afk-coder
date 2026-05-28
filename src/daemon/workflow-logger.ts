@@ -18,13 +18,17 @@ export interface WorkflowLogger extends EventEmitter {
 export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogger {
   private loggers: Map<string, winston.Logger> = new Map();
 
+  constructor(private readonly configManager?: ConfigManager) {
+    super();
+  }
+
   getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger {
     if (this.loggers.has(name)) {
       return this.loggers.get(name)!;
     }
 
-    const configManager = new ConfigManager(configDir);
-    const config = configManager.loadConfig();
+    const activeConfigManager = this.configManager || new ConfigManager(configDir);
+    const config = activeConfigManager.loadConfig();
     const logsDir = getLogsDir(config);
 
     if (!fs.existsSync(logsDir)) {
@@ -86,8 +90,8 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
     if (name && name !== 'daemon' && getWorkflowConfigDir) {
       configDir = getWorkflowConfigDir(name);
     }
-    const configManager = new ConfigManager(configDir);
-    const config = configManager.loadConfig();
+    const activeConfigManager = this.configManager || new ConfigManager(configDir);
+    const config = activeConfigManager.loadConfig();
     const logsDir = getLogsDir(config);
 
     if (options.daemon || name === 'daemon') {

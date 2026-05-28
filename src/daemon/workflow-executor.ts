@@ -4,7 +4,7 @@ import { Agent } from './agent';
 import { CodingPhaseAdapter, QaPhaseAdapter, WorkflowPhase, WorkflowPhaseContext } from './workflow-phase';
 import { GitClient, ShellGitClient } from '../common/git';
 import { ConfigManager } from '../common/config';
-
+import { WorkflowGitManager } from './workflow-git';
 
 export class WorkflowExecutor {
   public readonly name: string;
@@ -23,13 +23,13 @@ export class WorkflowExecutor {
   public phase: 'Coding' | 'QA' = 'Coding';
   public qaCycles: number = 0;
 
-
   public readonly agent: Agent;
   private taskBoard: ITaskBoard;
   private logger: winston.Logger;
   
   private phases: Map<string, WorkflowPhase> = new Map();
   public readonly git: GitClient;
+  public readonly gitManager: WorkflowGitManager;
 
   private onFinishedCallbacks: (() => void)[] = [];
 
@@ -62,7 +62,8 @@ export class WorkflowExecutor {
     branch?: string,
     gitClient?: GitClient,
     codingPhase?: WorkflowPhase,
-    qaPhase?: WorkflowPhase
+    qaPhase?: WorkflowPhase,
+    configManager?: ConfigManager
   ) {
     this.name = name;
     this.dir = dir;
@@ -78,16 +79,7 @@ export class WorkflowExecutor {
     this.phases.set('Coding', codingPhase || new CodingPhaseAdapter());
     this.phases.set('QA', qaPhase || new QaPhaseAdapter());
     this.git = gitClient || new ShellGitClient(dir);
-  }
-
-  private isAutoCommitEnabled(): boolean {
-    try {
-      const configManager = new ConfigManager(this.configDir);
-      const config = configManager.loadConfig();
-      return config.git?.autoCommit === true;
-    } catch {
-      return false;
-    }
+    this.gitManager = new WorkflowGitManager(this.git, this.logger, this.configDir, configManager);
   }
 
   get uptime(): number {
@@ -135,16 +127,8 @@ export class WorkflowExecutor {
             reportCompletedTasks: async (tasks: Task[]) => {
               for (const t of tasks) {
                 this.recentTasks.unshift(t.description);
-                if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-                  try {
-                    this.git.add('.');
-                    if (this.git.hasChanges()) {
-                      this.git.commit(`feat: ${t.description}`);
-                      this.logger.info(`Committed changes for task: ${t.description}`);
-                    }
-                  } catch (error: any) {
-                    this.logger.warn(`Failed to commit changes for task "${t.description}": ${error.message}`);
-                  }
+                if (this.isWorktree && this.sourceRepo && this.branch && this.gitManager.isAutoCommitEnabled()) {
+                  await this.gitManager.autoCommitTask(t.description);
                 }
               }
               if (this.recentTasks.length > 5) {
@@ -167,30 +151,14 @@ export class WorkflowExecutor {
 
             if (nextPhase === 'Done') {
               this.status = 'Done';
-              if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-                try {
-                  this.git.add('.');
-                  if (this.git.hasChanges()) {
-                    this.git.commit('chore: workflow completed successfully');
-                    this.logger.info('Committed final changes at workflow completion');
-                  }
-                } catch (error: any) {
-                  this.logger.warn(`Failed to make final commit: ${error.message}`);
-                }
+              if (this.isWorktree && this.sourceRepo && this.branch && this.gitManager.isAutoCommitEnabled()) {
+                await this.gitManager.autoCommitCompletion();
               }
               break;
             } else if (nextPhase.startsWith('Failed')) {
               this.status = nextPhase;
-              if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-                try {
-                  this.git.add('.');
-                  if (this.git.hasChanges()) {
-                    this.git.commit(`chore: workflow failed - ${nextPhase}`);
-                    this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
-                  }
-                } catch (error: any) {
-                  this.logger.warn(`Failed to make failure commit: ${error.message}`);
-                }
+              if (this.isWorktree && this.sourceRepo && this.branch && this.gitManager.isAutoCommitEnabled()) {
+                await this.gitManager.autoCommitFailure(nextPhase);
               }
               break;
             } else if (nextPhase === 'QA' && this.phase !== 'QA') {
@@ -204,15 +172,8 @@ export class WorkflowExecutor {
             if (this.status !== 'Killed') {
               this.logger.error('Workflow loop failed with exception', { error: error.message });
               this.status = 'Failed';
-              if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-                try {
-                  this.git.add('.');
-                  if (this.git.hasChanges()) {
-                    this.git.commit('chore: workflow failed with exception');
-                  }
-                } catch {
-                  // Ignore git commit failure
-                }
+              if (this.isWorktree && this.sourceRepo && this.branch && this.gitManager.isAutoCommitEnabled()) {
+                await this.gitManager.autoCommitFailureWithException();
               }
             }
             break;

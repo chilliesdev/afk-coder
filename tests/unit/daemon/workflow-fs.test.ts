@@ -130,4 +130,43 @@ describe('DefaultWorkflowFileSystem', () => {
       );
     });
   });
+
+  describe('new methods', () => {
+    it('exists should check if path exists', () => {
+      const p = path.join(tempDir, 'exists.txt');
+      expect(fileSystem.exists(p)).toBe(false);
+      fs.writeFileSync(p, 'hello');
+      expect(fileSystem.exists(p)).toBe(true);
+    });
+
+    it('mkdir should create directory', () => {
+      const p = path.join(tempDir, 'new-dir');
+      expect(fs.existsSync(p)).toBe(false);
+      fileSystem.mkdir(p);
+      expect(fs.existsSync(p)).toBe(true);
+    });
+
+    it('copyFile should copy file', () => {
+      const src = path.join(tempDir, 'src-copy.txt');
+      const dest = path.join(tempDir, 'dest-copy.txt');
+      fs.writeFileSync(src, 'hello');
+      fileSystem.copyFile(src, dest);
+      expect(fs.readFileSync(dest, 'utf8')).toBe('hello');
+    });
+
+    it('removeFile should delete a file or directory recursively', () => {
+      const p = path.join(tempDir, 'to-remove.txt');
+      fs.writeFileSync(p, 'hello');
+      expect(fs.existsSync(p)).toBe(true);
+      fileSystem.removeFile(p);
+      expect(fs.existsSync(p)).toBe(false);
+
+      const d = path.join(tempDir, 'to-remove-dir');
+      fs.mkdirSync(d);
+      fs.writeFileSync(path.join(d, 'inner.txt'), 'hello');
+      expect(fs.existsSync(d)).toBe(true);
+      fileSystem.removeFile(d);
+      expect(fs.existsSync(d)).toBe(false);
+    });
+  });
 });

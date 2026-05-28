@@ -1,6 +1,5 @@
 /* eslint-disable unicorn/prefer-event-target */
 import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent, MILESTONE_STATUS, MILESTONE_TYPE, MilestoneStatus } from '../common/types';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitClient, ShellGitClient } from '../common/git';
 import { EventEmitter } from 'node:events';
@@ -60,7 +59,7 @@ export class WorkflowManager extends EventEmitter {
       throw new Error(`Workflow ${name} is already running`);
     }
 
-    if (!fs.existsSync(dir)) {
+    if (!this.fileSystem.exists(dir)) {
       if (options.isWorktree && options.sourceRepo && options.branch) {
         const sourceGit = this.gitClientFactory(options.sourceRepo);
         // Prune dead worktrees first to avoid directory/reference conflicts
@@ -83,7 +82,7 @@ export class WorkflowManager extends EventEmitter {
           throw new Error(`Failed to create git worktree: ${error.message}`, { cause: error });
         }
       } else {
-        fs.mkdirSync(dir, { recursive: true });
+        this.fileSystem.mkdir(dir, { recursive: true });
       }
     }
 
@@ -93,10 +92,10 @@ export class WorkflowManager extends EventEmitter {
       const destPrd = path.join(dir, 'PRD.md');
       const destTasks = path.join(dir, 'tasks.md');
 
-      if (fs.existsSync(srcPrd) && !fs.existsSync(destPrd)) {
+      if (this.fileSystem.exists(srcPrd) && !this.fileSystem.exists(destPrd)) {
         this.fileSystem.safeMoveSync(srcPrd, destPrd);
       }
-      if (fs.existsSync(srcTasks) && !fs.existsSync(destTasks)) {
+      if (this.fileSystem.exists(srcTasks) && !this.fileSystem.exists(destTasks)) {
         this.fileSystem.safeMoveSync(srcTasks, destTasks);
       }
     }
@@ -104,10 +103,10 @@ export class WorkflowManager extends EventEmitter {
     const tasksPath = path.join(dir, 'tasks.md');
     const prdPath = path.join(dir, 'PRD.md');
 
-    if (!fs.existsSync(prdPath)) {
+    if (!this.fileSystem.exists(prdPath)) {
       throw new Error(`PRD.md not found in ${dir}`);
     }
-    if (!fs.existsSync(tasksPath)) {
+    if (!this.fileSystem.exists(tasksPath)) {
       throw new Error(`tasks.md not found in ${dir}`);
     }
 
@@ -184,17 +183,17 @@ export class WorkflowManager extends EventEmitter {
     if (executor.isWorktree && executor.sourceRepo) {
       try {
         const destDir = path.join(executor.sourceRepo, '.afk-coder', 'tasks', name);
-        fs.mkdirSync(destDir, { recursive: true });
+        this.fileSystem.mkdir(destDir, { recursive: true });
 
         const srcTasks = path.join(executor.dir, 'tasks.md');
         const srcPrd = path.join(executor.dir, 'PRD.md');
 
-        if (fs.existsSync(srcTasks)) {
-          fs.copyFileSync(srcTasks, path.join(destDir, 'tasks.md'));
+        if (this.fileSystem.exists(srcTasks)) {
+          this.fileSystem.copyFile(srcTasks, path.join(destDir, 'tasks.md'));
           this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Archived tasks.md to .afk-coder/tasks/${name}/`);
         }
-        if (fs.existsSync(srcPrd)) {
-          fs.copyFileSync(srcPrd, path.join(destDir, 'PRD.md'));
+        if (this.fileSystem.exists(srcPrd)) {
+          this.fileSystem.copyFile(srcPrd, path.join(destDir, 'PRD.md'));
           this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Archived PRD.md to .afk-coder/tasks/${name}/`);
         }
       } catch (error: any) {
@@ -204,27 +203,7 @@ export class WorkflowManager extends EventEmitter {
     }
 
     if (executor.isWorktree && executor.sourceRepo && executor.branch) {
-      try {
-        const git = executor.git;
-        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Checking for uncommitted changes...');
-        if (git.hasChanges()) {
-          git.add('.');
-          git.reset('tasks.md');
-          git.reset('PRD.md');
-
-          if (git.hasStagedChanges()) {
-            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Generating commit message using AI...');
-            const commitMsg = await executor.agent.generateCommitMessage(executor.dir, executor.configDir);
-            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Committing changes: "${commitMsg}"...`);
-            git.commit(commitMsg);
-          } else {
-            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'No other changes to commit.');
-          }
-        }
-      } catch (error: any) {
-        logger.error(`Failed to auto-commit changes before removing workflow: ${error.message}`);
-        this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Skipped auto-commit due to error: ${error.message}`);
-      }
+      await executor.gitManager.autoCommitBeforeRemoval(executor.agent, executor.dir, onMilestone);
     }
 
     if (executor.isWorktree && executor.sourceRepo) {
@@ -243,9 +222,7 @@ export class WorkflowManager extends EventEmitter {
         } else {
           this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Untracking git worktree...');
           const gitPointerPath = path.join(executor.dir, '.git');
-          if (fs.existsSync(gitPointerPath)) {
-            fs.rmSync(gitPointerPath, { force: true });
-          }
+          this.fileSystem.removeFile(gitPointerPath);
           const sourceGit = this.gitClientFactory(executor.sourceRepo);
           sourceGit.pruneWorktrees();
         }
