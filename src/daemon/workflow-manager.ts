@@ -2,6 +2,7 @@ import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent, MILESTONE_STATUS, MI
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitClient, ShellGitClient } from '../common/git';
+import { EventEmitter } from 'node:events';
 
 import * as winston from 'winston';
 import { TaskBoard } from './task-board';
@@ -14,7 +15,7 @@ import { WorkflowExecutor } from './workflow-executor';
 export type AgentFactory = (agentName?: string) => Agent;
 export type GitClientFactory = (dir: string) => GitClient;
 
-export class WorkflowManager {
+export class WorkflowManager extends EventEmitter {
   private workflows: Map<string, WorkflowExecutor> = new Map();
   private loggers: Map<string, winston.Logger> = new Map();
   private agentFactory: AgentFactory;
@@ -28,6 +29,7 @@ export class WorkflowManager {
     evaluator: OutcomeAnalyzer = new OutcomeAnalyzer(),
     gitClientFactory: GitClientFactory = (dir) => new ShellGitClient(dir)
   ) {
+    super();
     this.agentFactory = agentFactory;
     this.taskBoardFactory = taskBoardFactory;
     this.evaluator = evaluator;
@@ -80,6 +82,10 @@ export class WorkflowManager {
           tailable: true,
         }),
       ],
+    });
+
+    logger.on('data', (info) => {
+      this.emit('log', name, info);
     });
 
     this.loggers.set(name, logger);
@@ -183,6 +189,10 @@ export class WorkflowManager {
     const w = this.workflows.get(name);
     if (!w) return undefined;
     return w.toWorkflow();
+  }
+
+  getExecutor(name: string): WorkflowExecutor | undefined {
+    return this.workflows.get(name);
   }
 
   async killWorkflow(name: string) {

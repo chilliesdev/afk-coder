@@ -65,9 +65,10 @@ if (fs.existsSync(SOCKET_PATH)) {
 
 const server = net.createServer((socket) => {
   socket.on('data', async (data) => {
+    let keepOpen = false;
     try {
       const request = JSON.parse(data.toString());
-      let response: DaemonResponse;
+      let response: DaemonResponse = { success: true };
 
       switch (request.command) {
         case 'init': {
@@ -116,6 +117,54 @@ const server = net.createServer((socket) => {
           break;
         }
         case 'logs': {
+          if (request.args.follow) {
+            const executor = workflowManager.getExecutor(request.args.name);
+            if (!executor) {
+              throw new Error(`Workflow ${request.args.name} not found`);
+            }
+            keepOpen = true;
+            socket.write(JSON.stringify({ success: true }) + '\n');
+            const initialLogs = workflowManager.getLogs(request.args.name, {
+              tail: request.args.tail ? Number.parseInt(request.args.tail) : 20
+            });
+            if (initialLogs && initialLogs.content) {
+              const lines = initialLogs.content.split('\n');
+              for (const line of lines) {
+                if (line.trim()) {
+                  socket.write(JSON.stringify({ type: 'log', content: line }) + '\n');
+                }
+              }
+            }
+
+            const isRunning = executor.status !== 'Done' && 
+                              executor.status !== 'Killed' && 
+                              !executor.status.startsWith('Failed');
+
+            if (isRunning) {
+              const logListener = (name: string, info: any) => {
+                if (name === request.args.name) {
+                  socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
+                }
+              };
+              workflowManager.on('log', logListener);
+
+              const unsubscribeFinish = executor.onFinished(() => {
+                cleanup();
+                socket.end();
+              });
+
+              const cleanup = () => {
+                workflowManager.off('log', logListener);
+                unsubscribeFinish();
+              };
+
+              socket.on('close', cleanup);
+              socket.on('error', cleanup);
+            } else {
+              socket.end();
+            }
+            break;
+          }
           response = { success: true, data: workflowManager.getLogs(request.args.name, {
             tail: request.args.tail ? Number.parseInt(request.args.tail) : undefined,
             offset: request.args.offset === undefined ? undefined : Number.parseInt(request.args.offset)
@@ -127,11 +176,16 @@ const server = net.createServer((socket) => {
         }
       }
 
-      socket.write(JSON.stringify(response) + '\n');
+      if (!keepOpen) {
+        socket.write(JSON.stringify(response) + '\n');
+      }
     } catch (error: any) {
       socket.write(JSON.stringify({ success: false, message: error.message }) + '\n');
+      keepOpen = false;
     } finally {
-      socket.end();
+      if (!keepOpen) {
+        socket.end();
+      }
     }
   });
 });

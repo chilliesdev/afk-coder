@@ -1315,4 +1315,64 @@ describe('WorkflowManager', () => {
       expect(fileTransport.filename).toBe('test-rotate-4.json.log');
     });
   });
+
+  describe('Real-time Log Streaming integration', () => {
+    it('should emit log events from WorkflowManager when a logger receives a log message', (done) => {
+      const logger = (workflowManager as any).getOrCreateLogger('test-stream-wf', testDir);
+      
+      workflowManager.once('log', (name: string, info: any) => {
+        expect(name).toBe('test-stream-wf');
+        expect(info.message).toBe('Test real-time event log message');
+        done();
+      });
+
+      logger.info('Test real-time event log message');
+    });
+
+    it('should return the correct executor with getExecutor', async () => {
+      const tasksFile = path.join(testDir, 'tasks.md');
+      const prdFile = path.join(testDir, 'PRD.md');
+      fs.writeFileSync(tasksFile, '- [ ] Task 1');
+      fs.writeFileSync(prdFile, '# PRD');
+
+      mockRuntime.nextResult = { exitCode: 0, logs: 'Done' };
+
+      const workflow = await workflowManager.startWorkflow('test-exec-get', testDir);
+      const executor = workflowManager.getExecutor('test-exec-get');
+      expect(executor).toBeDefined();
+      expect(executor?.name).toBe('test-exec-get');
+      
+      await workflowManager.killWorkflow('test-exec-get');
+    });
+
+    it('should invoke onFinished callback on WorkflowExecutor when execution finishes', async () => {
+      jest.useRealTimers();
+      try {
+        const tasksFile = path.join(testDir, 'tasks.md');
+        const prdFile = path.join(testDir, 'PRD.md');
+        fs.writeFileSync(tasksFile, '- [ ] Task 1');
+        fs.writeFileSync(prdFile, '# PRD');
+
+        mockRuntime.nextResult = { exitCode: 0, logs: 'Done' };
+
+        const workflow = await workflowManager.startWorkflow('test-finish-callback', testDir);
+        const executor = workflowManager.getExecutor('test-finish-callback');
+        expect(executor).toBeDefined();
+
+        let finishedInvoked = false;
+        const unsubscribe = executor!.onFinished(() => {
+          finishedInvoked = true;
+        });
+
+        await workflowManager.killWorkflow('test-finish-callback');
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(finishedInvoked).toBe(true);
+
+        unsubscribe();
+      } finally {
+        jest.useFakeTimers();
+      }
+    });
+  });
 });

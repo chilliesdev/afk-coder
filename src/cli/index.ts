@@ -586,32 +586,21 @@ program
       };
 
       if (options.follow) {
-        let currentOffset: number | undefined;
         console.log(`Following logs for ${workflowName}... (Ctrl+C to stop)`);
-
-        // Initial fetch with tail
-        const initialResponse = await sendCommand('logs', {
-          name: workflowName,
-          tail: options.tail || 20
-        });
-
-        if (initialResponse.success) {
-          printFormattedLogs(initialResponse.data.content);
-          currentOffset = initialResponse.data.nextOffset;
-        }
-
-        while (true) {
-          const response = await sendCommand('logs', {
+        const response = await sendCommand(
+          'logs',
+          {
             name: workflowName,
-            offset: currentOffset
-          });
-          if (response.success) {
-            if (response.data.content) {
-              printFormattedLogs(response.data.content);
-            }
-            currentOffset = response.data.nextOffset;
+            tail: options.tail || 20,
+            follow: true
+          },
+          undefined,
+          (logLine) => {
+            printFormattedLogs(logLine);
           }
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        );
+        if (!response.success) {
+          console.error(`Failed to stream logs: ${response.message}`);
         }
       } else {
         const response = await sendCommand('logs', { name: workflowName, tail: options.tail });

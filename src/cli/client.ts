@@ -15,7 +15,12 @@ export class DaemonClient {
     this.socketPath = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath || '/tmp/afk-coder.sock';
   }
 
-  async sendCommand(command: string, args: any = {}, onMilestone?: (milestone: MilestoneEvent) => void): Promise<DaemonResponse> {
+  async sendCommand(
+    command: string,
+    args: any = {},
+    onMilestone?: (milestone: MilestoneEvent) => void,
+    onLog?: (logLine: string) => void
+  ): Promise<DaemonResponse> {
     return new Promise((resolve, reject) => {
       if (!this.socketPath) {
         reject(new Error('Socket path is not defined.'));
@@ -41,6 +46,10 @@ export class DaemonClient {
                 if (onMilestone) {
                   onMilestone(parsed);
                 }
+              } else if (parsed.type === 'log') {
+                if (onLog) {
+                  onLog(parsed.content);
+                }
               } else {
                 finalResponse = parsed;
               }
@@ -59,6 +68,10 @@ export class DaemonClient {
             if (parsed.type === MILESTONE_TYPE) {
               if (onMilestone) {
                 onMilestone(parsed);
+              }
+            } else if (parsed.type === 'log') {
+              if (onLog) {
+                onLog(parsed.content);
               }
             } else {
               finalResponse = parsed;

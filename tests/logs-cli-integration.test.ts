@@ -90,4 +90,25 @@ describe('afk logs command integration', () => {
     expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('[INFO] line 1\n'));
     expect(stdoutSpy).toHaveBeenCalledWith('line 2 (not json)\n');
   });
+
+  it('should call sendCommand with follow option and invoke callback on logs', async () => {
+    mockSendCommand.mockImplementation((command, args, onMilestone, onLog) => {
+      if (onLog) {
+        onLog('{"level":"info","message":"live line 1"}');
+        onLog('live line 2 (not json)');
+      }
+      return Promise.resolve({ success: true });
+    });
+
+    await runCommand(['logs', 'test-wf', '--follow', '--no-color']);
+
+    expect(mockSendCommand).toHaveBeenCalledWith(
+      'logs',
+      { name: 'test-wf', tail: 20, follow: true },
+      undefined,
+      expect.any(Function)
+    );
+    expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('[INFO] live line 1\n'));
+    expect(stdoutSpy).toHaveBeenCalledWith('live line 2 (not json)\n');
+  });
 });

@@ -32,6 +32,25 @@ export class WorkflowExecutor {
   private qaPhase: WorkflowPhase;
   public readonly git: GitClient;
 
+  private onFinishedCallbacks: (() => void)[] = [];
+
+  public onFinished(cb: () => void): () => void {
+    this.onFinishedCallbacks.push(cb);
+    return () => {
+      this.onFinishedCallbacks = this.onFinishedCallbacks.filter(c => c !== cb);
+    };
+  }
+
+  private notifyFinished() {
+    for (const cb of this.onFinishedCallbacks) {
+      try {
+        cb();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
   constructor(
     name: string,
     dir: string,
@@ -84,121 +103,125 @@ export class WorkflowExecutor {
 
   private async runLoop() {
     try {
-      await this.agent.start(this.dir, this.configDir);
-    } catch (error: any) {
-      this.logger.error('Failed to start execution runtime container', { error: error.message });
-      this.status = 'Failed: Runtime Startup Error';
-      return;
-    }
+      try {
+        await this.agent.start(this.dir, this.configDir);
+      } catch (error: any) {
+        this.logger.error('Failed to start execution runtime container', { error: error.message });
+        this.status = 'Failed: Runtime Startup Error';
+        return;
+      }
 
-    try {
-      while (this.status !== 'Failed' && this.status !== 'Done' && this.status !== 'Killed' && !this.status.startsWith('Failed')) {
-        const boardState = await this.taskBoard.load();
-        this.progress = `${boardState.progress.completed}/${boardState.progress.total}`;
+      try {
+        while (this.status !== 'Failed' && this.status !== 'Done' && this.status !== 'Killed' && !this.status.startsWith('Failed')) {
+          const boardState = await this.taskBoard.load();
+          this.progress = `${boardState.progress.completed}/${boardState.progress.total}`;
 
-        this.status = this.phase === 'Coding' ? 'Running: Autonomous Agent Loop' : 'Running: QA Phase';
-        this.currentTask = this.phase === 'Coding' ? 'Autonomous Task Selection' : undefined;
-        
-        const context: WorkflowPhaseContext = {
-          dir: this.dir,
-          configDir: this.configDir,
-          taskBoard: this.taskBoard,
-          agent: this.agent,
-          logger: this.logger,
-          qaCycles: this.qaCycles,
-          reportTokens: (input: number, output: number) => {
-            this.tokenUsage.input += input;
-            this.tokenUsage.output += output;
-            this.tokenUsage.total += (input + output);
-          },
-          reportCompletedTasks: async (tasks: Task[]) => {
-            for (const t of tasks) {
-              this.recentTasks.unshift(t.description);
+          this.status = this.phase === 'Coding' ? 'Running: Autonomous Agent Loop' : 'Running: QA Phase';
+          this.currentTask = this.phase === 'Coding' ? 'Autonomous Task Selection' : undefined;
+          
+          const context: WorkflowPhaseContext = {
+            dir: this.dir,
+            configDir: this.configDir,
+            taskBoard: this.taskBoard,
+            agent: this.agent,
+            logger: this.logger,
+            qaCycles: this.qaCycles,
+            reportTokens: (input: number, output: number) => {
+              this.tokenUsage.input += input;
+              this.tokenUsage.output += output;
+              this.tokenUsage.total += (input + output);
+            },
+            reportCompletedTasks: async (tasks: Task[]) => {
+              for (const t of tasks) {
+                this.recentTasks.unshift(t.description);
+                if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
+                  try {
+                    this.git.add('.');
+                    if (this.git.hasChanges()) {
+                      this.git.commit(`feat: ${t.description}`);
+                      this.logger.info(`Committed changes for task: ${t.description}`);
+                    }
+                  } catch (error: any) {
+                    this.logger.warn(`Failed to commit changes for task "${t.description}": ${error.message}`);
+                  }
+                }
+              }
+              if (this.recentTasks.length > 5) {
+                this.recentTasks.length = 5;
+              }
+              const updatedState = await this.taskBoard.load();
+              this.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
+              this.currentTask = undefined;
+            }
+          };
+
+          try {
+            const nextPhase = await (this.phase === 'Coding' ? this.codingPhase.execute(context) : this.qaPhase.execute(context));
+
+            if (this.status === 'Killed') break;
+
+            if (nextPhase === 'Done') {
+              this.status = 'Done';
               if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
                 try {
                   this.git.add('.');
                   if (this.git.hasChanges()) {
-                    this.git.commit(`feat: ${t.description}`);
-                    this.logger.info(`Committed changes for task: ${t.description}`);
+                    this.git.commit('chore: workflow completed successfully');
+                    this.logger.info('Committed final changes at workflow completion');
                   }
                 } catch (error: any) {
-                  this.logger.warn(`Failed to commit changes for task "${t.description}": ${error.message}`);
+                  this.logger.warn(`Failed to make final commit: ${error.message}`);
+                }
+              }
+              break;
+            } else if (nextPhase.startsWith('Failed')) {
+              this.status = nextPhase;
+              if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
+                try {
+                  this.git.add('.');
+                  if (this.git.hasChanges()) {
+                    this.git.commit(`chore: workflow failed - ${nextPhase}`);
+                    this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
+                  }
+                } catch (error: any) {
+                  this.logger.warn(`Failed to make failure commit: ${error.message}`);
+                }
+              }
+              break;
+            } else if (nextPhase === 'QA' && this.phase !== 'QA') {
+              this.phase = 'QA';
+            } else if (nextPhase === 'Coding' && this.phase !== 'Coding') {
+              this.phase = 'Coding';
+              this.qaCycles++;
+            }
+
+          } catch (error: any) {
+            if (this.status !== 'Killed') {
+              this.logger.error('Workflow loop failed with exception', { error: error.message });
+              this.status = 'Failed';
+              if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
+                try {
+                  this.git.add('.');
+                  if (this.git.hasChanges()) {
+                    this.git.commit('chore: workflow failed with exception');
+                  }
+                } catch {
+                  // Ignore git commit failure
                 }
               }
             }
-            if (this.recentTasks.length > 5) {
-              this.recentTasks.length = 5;
-            }
-            const updatedState = await this.taskBoard.load();
-            this.progress = `${updatedState.progress.completed}/${updatedState.progress.total}`;
-            this.currentTask = undefined;
+            break;
           }
-        };
-
+        }
+      } finally {
         try {
-          const nextPhase = await (this.phase === 'Coding' ? this.codingPhase.execute(context) : this.qaPhase.execute(context));
-
-          if (this.status === 'Killed') break;
-
-          if (nextPhase === 'Done') {
-            this.status = 'Done';
-            if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-              try {
-                this.git.add('.');
-                if (this.git.hasChanges()) {
-                  this.git.commit('chore: workflow completed successfully');
-                  this.logger.info('Committed final changes at workflow completion');
-                }
-              } catch (error: any) {
-                this.logger.warn(`Failed to make final commit: ${error.message}`);
-              }
-            }
-            break;
-          } else if (nextPhase.startsWith('Failed')) {
-            this.status = nextPhase;
-            if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-              try {
-                this.git.add('.');
-                if (this.git.hasChanges()) {
-                  this.git.commit(`chore: workflow failed - ${nextPhase}`);
-                  this.logger.info(`Committed changes at workflow failure: ${nextPhase}`);
-                }
-              } catch (error: any) {
-                this.logger.warn(`Failed to make failure commit: ${error.message}`);
-              }
-            }
-            break;
-          } else if (nextPhase === 'QA' && this.phase !== 'QA') {
-            this.phase = 'QA';
-          } else if (nextPhase === 'Coding' && this.phase !== 'Coding') {
-            this.phase = 'Coding';
-            this.qaCycles++;
-          }
-
+          await this.agent.stop();
         } catch (error: any) {
-          if (this.status !== 'Killed') {
-            this.logger.error('Workflow loop failed with exception', { error: error.message });
-            this.status = 'Failed';
-            if (this.isWorktree && this.sourceRepo && this.branch && this.isAutoCommitEnabled()) {
-              try {
-                this.git.add('.');
-                if (this.git.hasChanges()) {
-                  this.git.commit('chore: workflow failed with exception');
-                }
-              } catch {
-                // Ignore git commit failure
-              }
-            }
-          }
-          break;
+          this.logger.warn('Failed to stop execution runtime container', { error: error.message });
         }
       }
     } finally {
-      try {
-        await this.agent.stop();
-      } catch (error: any) {
-        this.logger.warn('Failed to stop execution runtime container', { error: error.message });
-      }
+      this.notifyFinished();
     }
   }
 
