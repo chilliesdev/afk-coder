@@ -42,5 +42,24 @@ sed -e "s/@USER@/$TARGET_USER/g" -e "s/@GROUP@/$TARGET_GROUP/g" afk-coder.servic
 sudo systemctl daemon-reload
 sudo systemctl enable afk-coder.service
 
+# Ask the user if they want to install the agent skill
+echo ""
+read -p "Would you like to install the 'delegate-to-afk' skill for your AI agents (Claude, Cursor, Aider, etc.)? [y/N]: " install_skill
+if [[ "$install_skill" =~ ^[Yy]$ ]]; then
+    read -p "Which agent(s) would you like to install the skill for? (e.g. *, antigravity, gemini-cli, aider-desk, claude-code, cursor) [Default: *]: " target_agents
+    if [ -z "$target_agents" ]; then
+        target_agents="*"
+    fi
+    echo "Installing delegate-to-afk skill for agents: $target_agents..."
+    set -f
+    sudo -u "$TARGET_USER" npx -y skills add ./skills/delegate-to-afk -g --agent $target_agents -y --copy
+    set +f
+else
+    echo "Skipping skill installation."
+fi
+
+
+
 echo "Installation complete."
 echo "You can start the daemon with: sudo systemctl start afk-coder"
+
