@@ -84,4 +84,51 @@ describe('Spinner', () => {
     expect(done1Call).toBeDefined();
     expect(done2Call).toBeDefined();
   });
+
+  it('should be idempotent on start() if already running', () => {
+    const spinner = new Spinner('Running...');
+    spinner.start();
+    const callsBefore = stdoutWriteSpy.mock.calls.length;
+    spinner.start('Running again...');
+    expect(stdoutWriteSpy.mock.calls.length).toBe(callsBefore);
+    spinner.stop();
+  });
+
+  it('should support update() to change message and trigger rendering in TTY', () => {
+    const spinner = new Spinner('Initial');
+    spinner.start();
+    spinner.update('Updated');
+    expect(stdoutWriteSpy).toHaveBeenCalledWith(expect.stringContaining('Updated'));
+    spinner.stop();
+  });
+
+  it('should support update() to log in non-TTY', () => {
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: false,
+      configurable: true,
+    });
+    const spinner = new Spinner('Initial');
+    spinner.start();
+    spinner.update('Updated non-TTY');
+    expect(consoleLogSpy).toHaveBeenCalledWith('Updated non-TTY');
+    spinner.stop();
+  });
+
+  it('should advance frames on interval tick', () => {
+    jest.useFakeTimers();
+    const spinner = new Spinner('Animating');
+    spinner.start();
+    
+    // First render should be frame 0
+    expect(stdoutWriteSpy).toHaveBeenCalledWith('⠋ Animating');
+    
+    // Advance timers by 160ms (2 ticks of 80ms)
+    jest.advanceTimersByTime(160);
+    // Should render frame 1 (frames = ['⠋', '⠙', ...])
+    expect(stdoutWriteSpy).toHaveBeenCalledWith('⠙ Animating');
+
+    spinner.stop();
+    jest.useRealTimers();
+  });
 });
+

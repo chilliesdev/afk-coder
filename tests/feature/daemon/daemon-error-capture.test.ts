@@ -1,9 +1,29 @@
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 
-jest.mock('net');
-jest.mock('fs');
-jest.mock('child_process');
+jest.mock('node:net');
+jest.mock('node:fs');
+jest.mock('node:child_process');
+
+const mockLoggerInstance = {
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+};
+jest.mock('winston', () => ({
+  createLogger: jest.fn().mockReturnValue(mockLoggerInstance),
+  format: {
+    combine: jest.fn(),
+    timestamp: jest.fn(),
+    json: jest.fn(),
+    colorize: jest.fn(),
+    simple: jest.fn(),
+  },
+  transports: {
+    Console: jest.fn(),
+    File: jest.fn(),
+  },
+}));
 
 jest.mock('../../../src/common/config', () => {
   const original = jest.requireActual('../../../src/common/config');
@@ -38,7 +58,7 @@ describe('Daemon Error Capture', () => {
       return process;
     });
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation((code?: any) => {
-      return undefined as never;
+      throw new Error(`Process exited with code ${code}`);
     });
   });
 
@@ -79,11 +99,10 @@ describe('Daemon Error Capture', () => {
       daemonLogger = daemonModule.daemonLogger;
     });
 
-    loggerErrorSpy = jest.spyOn(daemonLogger, 'error').mockImplementation(() => daemonLogger);
+    loggerErrorSpy = mockLoggerInstance.error;
   });
 
   afterEach(() => {
-    loggerErrorSpy.mockRestore();
   });
 
   it('should capture and log command routing crashes', async () => {
@@ -146,7 +165,11 @@ describe('Daemon Error Capture', () => {
     const testError = new Error('Uncaught Boom');
     (fs.existsSync as jest.Mock).mockReturnValue(true);
 
-    uncaughtHandler(testError);
+    try {
+      uncaughtHandler(testError);
+    } catch (err: any) {
+      expect(err.message).toBe('Process exited with code 1');
+    }
 
     expect(loggerErrorSpy).toHaveBeenCalledWith(
       'Uncaught Exception in daemon process',
@@ -175,4 +198,96 @@ describe('Daemon Error Capture', () => {
       })
     );
   });
+
+  it('should clean up socket and exit on SIGINT and SIGTERM signals', () => {
+    const sigintCall = processOnSpy.mock.calls.find(call => call[0] === 'SIGINT');
+    expect(sigintCall).toBeDefined();
+    const sigintHandler = sigintCall[1];
+
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    try {
+      sigintHandler();
+    } catch (err: any) {
+      expect(err.message).toBe('Process exited with code undefined');
+    }
+
+    expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/afk-coder-err-test.sock');
+    expect(processExitSpy).toHaveBeenCalled();
+
+    const sigtermCall = processOnSpy.mock.calls.find(call => call[0] === 'SIGTERM');
+    expect(sigtermCall).toBeDefined();
+    const sigtermHandler = sigtermCall[1];
+
+    jest.clearAllMocks();
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    try {
+      sigtermHandler();
+    } catch (err: any) {
+      expect(err.message).toBe('Process exited with code undefined');
+    }
+
+    expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/afk-coder-err-test.sock');
+    expect(processExitSpy).toHaveBeenCalled();
+  });
+
+  it('should parse --help command line argument and exit', () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'index.js', '--help'];
+    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+
+    jest.isolateModules(() => {
+      try {
+        require('../../../src/daemon/index');
+      } catch (err: any) {
+        expect(err.message).toBe('Process exited with code 0');
+      }
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('Usage: afk-coder-daemon'));
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+
+    process.argv = originalArgv;
+    consoleLogSpy.mockRestore();
+  });
+
+  it('should parse --socket command line argument to override socket path', () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'index.js', '--socket', '/tmp/override-cli.sock'];
+
+    jest.isolateModules(() => {
+      require('../../../src/daemon/index');
+    });
+
+    expect(net.createServer).toHaveBeenCalled();
+    // Since SOCKET_PATH was overridden, server.listen should be called with override path
+    expect(mockServer.listen).toHaveBeenCalledWith('/tmp/override-cli.sock', expect.any(Function));
+
+    process.argv = originalArgv;
+  });
+
+  it('should handle permission errors gracefully when unlinking socket path', () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'index.js', '--socket', '/tmp/permission-unlink.sock'];
+    
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    const permError = new Error('EACCES: permission denied');
+    (permError as any).code = 'EACCES';
+    (fs.unlinkSync as jest.Mock).mockImplementationOnce(() => {
+      throw permError;
+    });
+
+    jest.isolateModules(() => {
+      try {
+        require('../../../src/daemon/index');
+      } catch (err: any) {
+        expect(err.message).toBe('Process exited with code 1');
+      }
+    });
+
+    expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error: EACCES: operation not permitted'));
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+
+    process.argv = originalArgv;
+  });
 });
+

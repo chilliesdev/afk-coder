@@ -11,6 +11,7 @@ import { execSync } from 'node:child_process';
 import { MockGitClient } from '../../helpers/mock-git-client';
 import { TaskValidator } from '../../../src/common/validation';
 import * as winston from 'winston';
+import { MilestoneEvent, MILESTONE_STATUS } from '../../../src/common/types';
 
 jest.mock('node:child_process', () => ({
   execSync: jest.fn()
@@ -934,6 +935,68 @@ describe('WorkflowManager', () => {
       expect(fs.existsSync(standardDir)).toBe(true);
 
       // Cleanup
+      fs.rmSync(standardDir, { recursive: true, force: true });
+    });
+
+    it('should throw error and emit failed milestone when git worktree removal fails', async () => {
+      const mockGit = {
+        removeWorktree: jest.fn().mockImplementation(() => {
+          throw new Error('Git remove worktree failed');
+        }),
+      } as any;
+
+      const originalFactory = (workflowManager as any).gitClientFactory;
+      (workflowManager as any).gitClientFactory = () => mockGit;
+
+      await resetBoard('- [ ] Task 1');
+      await workflowManager.startWorkflow('wt-delete-err', testDir, {
+        isWorktree: true,
+        sourceRepo: sourceRepoDir,
+        branch: 'workflow/wt-delete-err'
+      });
+
+      const executor = (workflowManager as any).workflows.get('wt-delete-err');
+      executor.status = 'Done';
+
+      const milestones: MilestoneEvent[] = [];
+      await expect(
+        workflowManager.removeWorkflow('wt-delete-err', (m) => milestones.push(m), true)
+      ).rejects.toThrow('Git remove worktree failed');
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.FAILED,
+        message: 'Failed to remove/untrack git worktree: Git remove worktree failed'
+      }));
+
+      (workflowManager as any).gitClientFactory = originalFactory;
+    });
+
+    it('should throw error and emit failed milestone when directory deletion fails', async () => {
+      await resetBoard('- [ ] Task 1');
+      const standardDir = path.resolve('./test-standard-workflow-err');
+      if (!fs.existsSync(standardDir)) fs.mkdirSync(standardDir);
+      fs.writeFileSync(path.join(standardDir, 'PRD.md'), '# PRD');
+      fs.writeFileSync(path.join(standardDir, 'tasks.md'), '- [ ] Task 1');
+      
+      await workflowManager.startWorkflow('standard-delete-err', standardDir);
+      const executor = (workflowManager as any).workflows.get('standard-delete-err');
+      executor.status = 'Done';
+
+      jest.spyOn((workflowManager as any).fileSystem, 'deleteDirectory').mockImplementation(() => {
+        throw new Error('Deletion failed');
+      });
+
+      const milestones: MilestoneEvent[] = [];
+      await expect(
+        workflowManager.removeWorkflow('standard-delete-err', (m) => milestones.push(m), true)
+      ).rejects.toThrow('Deletion failed');
+
+      expect(milestones).toContainEqual(expect.objectContaining({
+        status: MILESTONE_STATUS.FAILED,
+        message: 'Failed to delete directory: Deletion failed'
+      }));
+
+      jest.restoreAllMocks();
       fs.rmSync(standardDir, { recursive: true, force: true });
     });
   });

@@ -118,18 +118,49 @@ describe('DefaultWorkflowFileSystem', () => {
   });
 
   describe('ensureDirectoryWritable', () => {
-    it('should run chown using docker command', () => {
+    it('should run chown using docker command and emit milestones', () => {
       const targetDir = path.join(tempDir, 'target');
       fs.mkdirSync(targetDir);
+      
+      const milestones: any[] = [];
+      const onMilestone = (m: any) => milestones.push(m);
 
-      fileSystem.ensureDirectoryWritable(targetDir);
+      fileSystem.ensureDirectoryWritable(targetDir, undefined, undefined, onMilestone);
 
       expect(execSync).toHaveBeenCalledWith(
         expect.stringContaining('docker run --rm -v'),
         { stdio: 'ignore' }
       );
+      expect(milestones).toContainEqual(expect.objectContaining({
+        message: 'Fixing worktree directory permissions using Docker...'
+      }));
+    });
+
+    it('should handle Docker command execution failures and log them', () => {
+      const targetDir = path.join(tempDir, 'target');
+      fs.mkdirSync(targetDir);
+
+      (execSync as jest.Mock).mockImplementation(() => {
+        throw new Error('Docker daemon not running');
+      });
+
+      const mockLogger = {
+        error: jest.fn(),
+      } as any;
+      const milestones: any[] = [];
+      const onMilestone = (m: any) => milestones.push(m);
+
+      fileSystem.ensureDirectoryWritable(targetDir, undefined, mockLogger, onMilestone);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to change directory permissions via Docker: Docker daemon not running')
+      );
+      expect(milestones).toContainEqual(expect.objectContaining({
+        message: expect.stringContaining('Docker permission fix failed')
+      }));
     });
   });
+
 
   describe('new methods', () => {
     it('exists should check if path exists', () => {

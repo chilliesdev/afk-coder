@@ -495,4 +495,54 @@ describe('Agent Task Generation', () => {
     expect(mockRuntime.startCalled).toBe(false);
     expect(mockRuntime.stopCalled).toBe(false);
   });
+
+  describe('generateCommitMessage', () => {
+    it('should generate a commit message successfully', async () => {
+      mockRuntime.nextResult = { exitCode: 0, logs: 'feat: add login feature' };
+      const msg = await agent.generateCommitMessage('/some/dir');
+      expect(msg).toBe('feat: add login feature');
+      expect(mockRuntime.startCalled).toBe(true);
+      expect(mockRuntime.stopCalled).toBe(true);
+    });
+
+    it('should return default message if exitCode is non-zero', async () => {
+      mockRuntime.nextResult = { exitCode: 1, logs: 'error' };
+      const msg = await agent.generateCommitMessage('/some/dir');
+      expect(msg).toBe('chore: auto-commit before workflow removal');
+      expect(mockRuntime.startCalled).toBe(true);
+      expect(mockRuntime.stopCalled).toBe(true);
+    });
+
+    it('should return default message if logs are empty', async () => {
+      mockRuntime.nextResult = { exitCode: 0, logs: '' };
+      const msg = await agent.generateCommitMessage('/some/dir');
+      expect(msg).toBe('chore: auto-commit before workflow removal');
+    });
+
+    it('should return default message if runtime throws an error', async () => {
+      mockRuntime.run = jest.fn().mockRejectedValue(new Error('crash'));
+      const msg = await agent.generateCommitMessage('/some/dir');
+      expect(msg).toBe('chore: auto-commit before workflow removal');
+    });
+  });
+
+  describe('cleanAgentLogs / response extraction', () => {
+    it('should extract response field from JSON log block if present', () => {
+      const logs = 'Some raw startup logs\n{\n  "response": "Cleaned response text"\n}\nTrailing noise';
+      const result = (agent as any).cleanAgentLogs(logs);
+      expect(result).toBe('Cleaned response text');
+    });
+
+    it('should keep raw logs if JSON exists but response field is missing', () => {
+      const logs = '{\n  "no_response_field": "some val"\n}';
+      const result = (agent as any).cleanAgentLogs(logs);
+      expect(result).toBe('{\n  "no_response_field": "some val"\n}');
+    });
+
+    it('should keep raw logs if JSON parsing fails inside the brackets', () => {
+      const logs = '{\n  invalid json here\n}';
+      const result = (agent as any).cleanAgentLogs(logs);
+      expect(result).toBe('{\n  invalid json here\n}');
+    });
+  });
 });

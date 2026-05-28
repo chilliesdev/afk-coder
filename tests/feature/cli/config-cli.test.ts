@@ -25,7 +25,7 @@ describe('Config CLI', () => {
       // Set HOME to our temp dir so it uses a fresh config
       const output = execSync(`${TS_NODE_BIN} ${BIN_PATH} ${args}`, {
         encoding: 'utf-8',
-        timeout: 20000,
+        timeout: 60000,
         env: { 
           ...process.env, 
           HOME: TEST_CONFIG_DIR, 

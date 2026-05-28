@@ -163,5 +163,67 @@ describe('WorkflowGitManager', () => {
         message: 'No other changes to commit.'
       }));
     });
+
+    it('should log an error and milestone update if autoCommitBeforeRemoval throws', async () => {
+      mockGit.hasChanges.mockReturnValue(true);
+      mockGit.hasStagedChanges.mockReturnValue(true);
+      mockAgent.generateCommitMessage.mockRejectedValue(new Error('AI generation crashed'));
+
+      const milestones: any[] = [];
+      const onMilestone = (m: any) => milestones.push(m);
+
+      await gitManager.autoCommitBeforeRemoval(mockAgent, '/wf/dir', onMilestone);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to auto-commit changes before removing'));
+      expect(milestones).toContainEqual(expect.objectContaining({
+        message: expect.stringContaining('Skipped auto-commit due to error')
+      }));
+    });
+  });
+
+  describe('autoCommitCompletion errors', () => {
+    it('should log warning on throw', async () => {
+      mockGit.hasChanges.mockReturnValue(true);
+      mockGit.commit.mockImplementation(() => {
+        throw new Error('Write lock fail');
+      });
+      await gitManager.autoCommitCompletion();
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to make final commit'));
+    });
+  });
+
+  describe('autoCommitFailure errors', () => {
+    it('should log warning on throw', async () => {
+      mockGit.hasChanges.mockReturnValue(true);
+      mockGit.commit.mockImplementation(() => {
+        throw new Error('Write lock fail');
+      });
+      await gitManager.autoCommitFailure('Failed state');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to make failure commit'));
+    });
+  });
+
+  describe('autoCommitFailureWithException', () => {
+    it('should commit success on changes', async () => {
+      mockGit.hasChanges.mockReturnValue(true);
+      await gitManager.autoCommitFailureWithException();
+      expect(mockGit.commit).toHaveBeenCalledWith('chore: workflow failed with exception');
+    });
+
+    it('should ignore errors when committing throws', async () => {
+      mockGit.hasChanges.mockReturnValue(true);
+      mockGit.commit.mockImplementation(() => {
+        throw new Error('Git fail silently');
+      });
+      await expect(gitManager.autoCommitFailureWithException()).resolves.not.toThrow();
+    });
+  });
+
+  describe('Constructor fallback', () => {
+    it('should default configManager if not provided', () => {
+      const defaultGitMgr = new WorkflowGitManager(mockGit, mockLogger, '/mock/configDir');
+      expect((defaultGitMgr as any).configManager).toBeDefined();
+    });
   });
 });
+

@@ -223,4 +223,71 @@ describe('DaemonClient NDJSON Streaming', () => {
     const result = await promise;
     expect(result).toEqual(response);
   });
+
+  it('should resolve default socket path using ConfigManager and environment variables', () => {
+    const originalSocketEnv = process.env.AFK_CODER_SOCKET;
+    delete process.env.AFK_CODER_SOCKET;
+    try {
+      const defaultClient = new DaemonClient();
+      expect((defaultClient as any).socketPath).toBe('/tmp/afk-coder.sock');
+
+      process.env.AFK_CODER_SOCKET = '/tmp/env-sock.sock';
+      const envClient = new DaemonClient();
+      expect((envClient as any).socketPath).toBe('/tmp/env-sock.sock');
+    } finally {
+      process.env.AFK_CODER_SOCKET = originalSocketEnv;
+    }
+  });
+
+  it('should trigger onLog callback when log events are received in data stream', async () => {
+    const logs: string[] = [];
+    const onLog = (l: string) => logs.push(l);
+
+    const promise = client.sendCommand('test', {}, undefined, onLog);
+
+    const handlers: Record<string, Function> = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+
+    handlers['data'](Buffer.from(JSON.stringify({ type: 'log', content: 'hello log' }) + '\n'));
+    handlers['data'](Buffer.from(JSON.stringify({ success: true }) + '\n'));
+    handlers['end']();
+
+    await promise;
+    expect(logs).toEqual(['hello log']);
+  });
+
+  it('should trigger onLog and onMilestone callbacks at the end of stream without newlines', async () => {
+    const logs: string[] = [];
+    const milestones: any[] = [];
+    const onLog = (l: string) => logs.push(l);
+    const onMilestone = (m: any) => milestones.push(m);
+
+    // Test log at the end
+    const promise1 = client.sendCommand('test', {}, undefined, onLog);
+    let handlers: Record<string, Function> = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+    handlers['data'](Buffer.from(JSON.stringify({ success: true }) + '\n'));
+    handlers['data'](Buffer.from(JSON.stringify({ type: 'log', content: 'end log' }))); // no newline
+    handlers['end']();
+    await promise1;
+    expect(logs).toEqual(['end log']);
+
+    // Test milestone at the end
+    const promise2 = client.sendCommand('test', {}, onMilestone);
+    handlers = {};
+    mockSocket.on.mock.calls.forEach((call: any) => {
+      handlers[call[0]] = call[1];
+    });
+    handlers['data'](Buffer.from(JSON.stringify({ success: true }) + '\n'));
+    const milestoneObj = { type: MILESTONE_TYPE, status: MILESTONE_STATUS.COMPLETED, message: 'finished' };
+    handlers['data'](Buffer.from(JSON.stringify(milestoneObj))); // no newline
+    handlers['end']();
+    await promise2;
+    expect(milestones).toEqual([milestoneObj]);
+  });
 });
+
