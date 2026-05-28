@@ -1,6 +1,6 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { FileSystem, NodeFileSystem } from './fs-interface';
 import 'dotenv/config';
 
 export const CONFIG_DIR = path.join(os.homedir(), '.config', 'afk-coder');
@@ -75,25 +75,27 @@ export class ConfigManager {
   private readonly configDir: string;
   private readonly tokensPath: string;
   private readonly configPath: string;
+  private readonly fs: FileSystem;
 
-  constructor(configDir?: string) {
+  constructor(configDir?: string, fileSystem: FileSystem = new NodeFileSystem()) {
     this.configDir = configDir || CONFIG_DIR;
     this.tokensPath = path.join(this.configDir, 'tokens.json');
     this.configPath = path.join(this.configDir, 'config.json');
+    this.fs = fileSystem;
   }
 
   ensureConfigDir(): void {
-    if (!fs.existsSync(this.configDir)) {
-      fs.mkdirSync(this.configDir, { recursive: true });
+    if (!this.fs.existsSync(this.configDir)) {
+      this.fs.mkdirSync(this.configDir, { recursive: true });
     }
   }
 
   loadConfig(): Config {
-    if (!fs.existsSync(this.configPath)) {
+    if (!this.fs.existsSync(this.configPath)) {
       return DEFAULT_CONFIG;
     }
     try {
-      const userConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+      const userConfig = JSON.parse(this.fs.readFileSync(this.configPath, 'utf8'));
       return {
         ...DEFAULT_CONFIG,
         ...userConfig,
@@ -126,19 +128,19 @@ export class ConfigManager {
 
   saveConfig(config: Config): void {
     this.ensureConfigDir();
-    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
+    this.fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
   }
 
   saveTokens(tokens: any): void {
     this.ensureConfigDir();
-    fs.writeFileSync(this.tokensPath, JSON.stringify(tokens, null, 2));
+    this.fs.writeFileSync(this.tokensPath, JSON.stringify(tokens, null, 2));
   }
 
   loadTokens(): any {
-    if (!fs.existsSync(this.tokensPath)) {
+    if (!this.fs.existsSync(this.tokensPath)) {
       return null;
     }
-    return JSON.parse(fs.readFileSync(this.tokensPath, 'utf8'));
+    return JSON.parse(this.fs.readFileSync(this.tokensPath, 'utf8'));
   }
 
   async refreshToken(): Promise<any> {

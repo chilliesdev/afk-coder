@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DefaultWorkflowLogger } from '../../../src/daemon/workflow-logger';
+import { FileSystem } from '../../../src/common/fs-interface';
 
 const mockLoadConfig = jest.fn();
 jest.mock('../../../src/common/config', () => {
@@ -107,5 +108,26 @@ describe('DefaultWorkflowLogger', () => {
     const secondRead = workflowLogger.getLogs('wf5', { offset: Buffer.byteLength(firstLine) });
     expect(secondRead.content).not.toContain('Line 1');
     expect(secondRead.content).toContain('Line 2');
+  });
+
+  it('should support in-memory log reading using injected FileSystem', () => {
+    class MemoryFileSystem implements FileSystem {
+      private files = new Map<string, string>();
+      existsSync(path: string): boolean { return this.files.has(path); }
+      readFileSync(path: string, encoding: 'utf8'): string { return this.files.get(path) || ''; }
+      writeFileSync(path: string, content: string): void { this.files.set(path, content); }
+      mkdirSync() {}
+      readdirSync() { return []; }
+      statSync(p: string) { return { size: this.files.get(p)?.length || 0, isDirectory: () => false }; }
+      openSync() { return 0; }
+      readSync() { return 0; }
+      closeSync() {}
+      rmSync() {}
+    }
+    const memFs = new MemoryFileSystem();
+    const logger = new DefaultWorkflowLogger(undefined, memFs);
+    memFs.writeFileSync(path.join(logsDir, 'wf-mem.json.log'), JSON.stringify({ timestamp: '2026-05-28T12:00:00.000Z', level: 'info', message: 'Hello Memory', workflow: 'wf-mem' }) + '\n');
+    const result = logger.getLogs('wf-mem', {});
+    expect(result.content).toContain('Hello Memory');
   });
 });

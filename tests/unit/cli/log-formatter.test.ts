@@ -84,18 +84,30 @@ describe('LogFormatter', () => {
   });
 
   describe('TTY Detection', () => {
-    let originalIsTTY: boolean | undefined;
+    let originalDescriptor: PropertyDescriptor | undefined;
 
-    beforeAll(() => {
-      originalIsTTY = process.stdout.isTTY;
+    beforeEach(() => {
+      originalDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
     });
 
-    afterAll(() => {
-      (process.stdout as any).isTTY = originalIsTTY;
+    afterEach(() => {
+      if (originalDescriptor) {
+        Object.defineProperty(process.stdout, 'isTTY', originalDescriptor);
+      } else {
+        delete (process.stdout as any).isTTY;
+      }
     });
+
+    const setStdoutIsTTY = (val: boolean) => {
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: val,
+        configurable: true,
+        writable: true
+      });
+    };
 
     it('should disable colors if stdout is not a TTY and no option provided', () => {
-      (process.stdout as any).isTTY = false;
+      setStdoutIsTTY(false);
       const formatter = new LogFormatter();
       const line = JSON.stringify({ level: 'error', message: 'fail' });
       const result = formatter.format(line);
@@ -103,7 +115,7 @@ describe('LogFormatter', () => {
     });
 
     it('should disable colors if stdout is not a TTY and color option is true (simulating commander default)', () => {
-      (process.stdout as any).isTTY = false;
+      setStdoutIsTTY(false);
       const formatter = new LogFormatter({ color: true });
       const line = JSON.stringify({ level: 'error', message: 'fail' });
       const result = formatter.format(line);
@@ -113,7 +125,7 @@ describe('LogFormatter', () => {
     });
 
     it('should enable colors if stdout is a TTY and no option provided', () => {
-      (process.stdout as any).isTTY = true;
+      setStdoutIsTTY(true);
       const formatter = new LogFormatter();
       const line = JSON.stringify({ level: 'error', message: 'fail' });
       const result = formatter.format(line);
@@ -121,7 +133,7 @@ describe('LogFormatter', () => {
     });
     
     it('should disable colors if color option is false regardless of TTY', () => {
-      (process.stdout as any).isTTY = true;
+      setStdoutIsTTY(true);
       const formatter = new LogFormatter({ color: false });
       const line = JSON.stringify({ level: 'error', message: 'fail' });
       const result = formatter.format(line);

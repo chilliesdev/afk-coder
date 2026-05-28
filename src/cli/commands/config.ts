@@ -10,28 +10,48 @@ export class ConfigCommand extends BaseCommand {
       .command('show')
       .description('Print the current configuration')
       .action(async () => {
-        await this.executeShow();
+        try {
+          await this.executeShow();
+        } catch (error: any) {
+          console.error(error.message);
+          process.exit(1);
+        }
       });
 
     configCmd
       .command('get <key>')
       .description('Get a configuration value (supports dot-notation for nested keys)')
       .action(async (key) => {
-        await this.executeGet(key);
+        try {
+          await this.executeGet(key);
+        } catch (error: any) {
+          console.error(error.message);
+          process.exit(1);
+        }
       });
 
     configCmd
       .command('set <key> <value>')
       .description('Set a configuration value (supports dot-notation and type coercion)')
       .action(async (key, value) => {
-        await this.executeSet(key, value);
+        try {
+          await this.executeSet(key, value);
+        } catch (error: any) {
+          console.error(error.message);
+          process.exit(1);
+        }
       });
 
     configCmd
       .command('edit')
       .description('Open the configuration file in your default editor')
       .action(async () => {
-        await this.executeEdit();
+        try {
+          await this.executeEdit();
+        } catch (error: any) {
+          console.error(error.message);
+          process.exit(1);
+        }
       });
   }
 
@@ -53,8 +73,7 @@ export class ConfigCommand extends BaseCommand {
       if (val && typeof val === 'object' && part in val) {
         val = val[part];
       } else {
-        console.error(`Error: Configuration key "${key}" not found.`);
-        process.exit(1);
+        throw new Error(`Error: Configuration key "${key}" not found.`);
       }
     }
 
@@ -100,16 +119,14 @@ export class ConfigCommand extends BaseCommand {
     
     // Validation for specific keys
     if ((key === 'sandbox.memory' || key === 'sandbox.nanoCpus') && (typeof coercedValue !== 'number' || Number.isNaN(coercedValue))) {
-      console.error(`Error: ${key} must be a number.`);
-      process.exit(1);
+      throw new Error(`Error: ${key} must be a number.`);
     }
 
     if (key === 'daemon.logLevel') {
       const allowedLevels = ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'];
       const valStr = String(coercedValue).toLowerCase();
       if (!allowedLevels.includes(valStr)) {
-        console.error(`Error: daemon.logLevel must be one of: ${allowedLevels.join(', ')}`);
-        process.exit(1);
+        throw new Error(`Error: daemon.logLevel must be one of: ${allowedLevels.join(', ')}`);
       }
       coercedValue = valStr;
     }
@@ -155,7 +172,7 @@ export class ConfigCommand extends BaseCommand {
     if (result.status === 0) {
       console.log('Configuration updated.');
     } else {
-      console.error(`Editor exited with code ${result.status}`);
+      throw new Error(`Editor exited with code ${result.status}`);
     }
   }
 }

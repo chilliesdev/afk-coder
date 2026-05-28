@@ -1,9 +1,9 @@
 /* eslint-disable unicorn/prefer-event-target */
 import { EventEmitter } from 'node:events';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as winston from 'winston';
 import { ConfigManager, getLogsDir } from '../common/config';
+import { FileSystem, NodeFileSystem } from '../common/fs-interface';
 
 export interface WorkflowLogger extends EventEmitter {
   getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger;
@@ -17,9 +17,11 @@ export interface WorkflowLogger extends EventEmitter {
 
 export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogger {
   private loggers: Map<string, winston.Logger> = new Map();
+  private readonly fs: FileSystem;
 
-  constructor(private readonly configManager?: ConfigManager) {
+  constructor(private readonly configManager?: ConfigManager, fileSystem: FileSystem = new NodeFileSystem()) {
     super();
+    this.fs = fileSystem;
   }
 
   getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger {
@@ -31,8 +33,8 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
     const config = activeConfigManager.loadConfig();
     const logsDir = getLogsDir(config);
 
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
+    if (!this.fs.existsSync(logsDir)) {
+      this.fs.mkdirSync(logsDir, { recursive: true });
     }
     const logFile = path.join(logsDir, `${name}.json.log`);
 
@@ -96,7 +98,7 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
 
     if (options.daemon || name === 'daemon') {
       const logFile = path.join(logsDir, 'daemon.json.log');
-      if (!fs.existsSync(logFile)) {
+      if (!this.fs.existsSync(logFile)) {
         return { content: 'No daemon logs found.', nextOffset: 0 };
       }
       return this.readSingleLogFile(logFile, undefined, options);
@@ -104,17 +106,17 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
 
     if (name) {
       const logFile = path.join(logsDir, `${name}.json.log`);
-      if (!fs.existsSync(logFile)) {
+      if (!this.fs.existsSync(logFile)) {
         return { content: 'No logs found.', nextOffset: 0 };
       }
       return this.readSingleLogFile(logFile, name, options);
     }
 
     // Read all workflow log files
-    if (!fs.existsSync(logsDir)) {
+    if (!this.fs.existsSync(logsDir)) {
       return { content: 'No logs found.', nextOffset: 0 };
     }
-    const files = fs.readdirSync(logsDir);
+    const files = this.fs.readdirSync(logsDir);
     const logFiles = files.filter(f => f.endsWith('.json.log') && f !== 'daemon.json.log');
     if (logFiles.length === 0) {
       return { content: 'No logs found.', nextOffset: 0 };
@@ -143,7 +145,7 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
     filterName?: string,
     options: { tail?: number; offset?: number } = {}
   ): { content: string; nextOffset: number } {
-    const stats = fs.statSync(logFile);
+    const stats = this.fs.statSync(logFile);
     const filterLogs = (rawContent: string): string => {
       const lines = rawContent.split('\n');
       const filtered = lines.filter(line => {
@@ -164,15 +166,15 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
       if (options.offset >= stats.size) {
         return { content: '', nextOffset: stats.size };
       }
-      const fd = fs.openSync(logFile, 'r');
+      const fd = this.fs.openSync(logFile, 'r');
       const buffer = Buffer.alloc(stats.size - options.offset);
-      fs.readSync(fd, buffer, 0, buffer.length, options.offset);
-      fs.closeSync(fd);
+      this.fs.readSync(fd, buffer, 0, buffer.length, options.offset);
+      this.fs.closeSync(fd);
       const filteredContent = filterLogs(buffer.toString('utf-8'));
       return { content: filteredContent, nextOffset: stats.size };
     }
 
-    const content = fs.readFileSync(logFile, 'utf8');
+    const content = this.fs.readFileSync(logFile, 'utf8');
     const filteredContent = filterLogs(content);
     if (options.tail) {
       const lines = filteredContent.trim().split('\n');
@@ -186,9 +188,9 @@ export class DefaultWorkflowLogger extends EventEmitter implements WorkflowLogge
   }
 
   private readLogLines(logFile: string, filterName?: string): { line: string; timestamp: number }[] {
-    if (!fs.existsSync(logFile)) return [];
+    if (!this.fs.existsSync(logFile)) return [];
     try {
-      const content = fs.readFileSync(logFile, 'utf8');
+      const content = this.fs.readFileSync(logFile, 'utf8');
       const rawLines = content.split('\n');
       const parsedLines: { line: string; timestamp: number }[] = [];
       let lastTimestamp = 0;
