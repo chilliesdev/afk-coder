@@ -117,7 +117,7 @@ export class WorkflowExecutor {
           this.progress = `${boardState.progress.completed}/${boardState.progress.total}`;
 
           this.status = this.phase === 'Coding' ? 'Running: Autonomous Agent Loop' : 'Running: QA Phase';
-          this.currentTask = this.phase === 'Coding' ? 'Autonomous Task Selection' : undefined;
+          this.currentTask = this.phase === 'Coding' ? (boardState.pendingTasks[0]?.description ?? undefined) : undefined;
           
           const context: WorkflowPhaseContext = {
             dir: this.dir,

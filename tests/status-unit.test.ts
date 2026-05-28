@@ -81,7 +81,7 @@ describe('WorkflowManager Status Updates', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
       workflow = workflowManager.getWorkflow('test-wf')!;
     }
-    expect(workflow.currentTask).toBe('Autonomous Task Selection');
+    expect(workflow.currentTask).toBe('Task 1');
 
     // Wait for tasks to complete
     let attempts = 0;
