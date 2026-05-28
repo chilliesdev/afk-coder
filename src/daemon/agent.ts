@@ -360,7 +360,7 @@ export class Agent {
         return defaultMessage;
       }
       
-      const cleanMessage = result.logs.trim().replace(/^['"\s]+|['"\s]+$/g, '').split('\n')[0].trim();
+      const cleanMessage = result.logs.trim().replaceAll(/^['"\s]+|['"\s]+$/g, '').split('\n')[0].trim();
       return cleanMessage || defaultMessage;
     } catch {
       return defaultMessage;

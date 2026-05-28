@@ -63,7 +63,7 @@ export class LogFormatter {
     if (log.timestamp) {
       const date = new Date(log.timestamp);
       if (!isNaN(date.getTime())) {
-        const ts = date.toISOString().replace('T', ' ').substring(0, 19);
+        const ts = date.toISOString().replace('T', ' ').slice(0, 19);
         parts.push(this.colorize(`[${ts}]`, 'cyan'));
       }
     }
@@ -72,9 +72,23 @@ export class LogFormatter {
     if (log.level) {
       const level = log.level.toUpperCase();
       let color: keyof typeof this.colors = 'reset';
-      if (level === 'INFO') color = 'green';
-      else if (level === 'WARN' || level === 'WARNING') color = 'yellow';
-      else if (level === 'ERROR') color = 'red';
+      switch (level) {
+      case 'INFO': {
+      color = 'green';
+      break;
+      }
+      case 'WARN': 
+      case 'WARNING': {
+      color = 'yellow';
+      break;
+      }
+      case 'ERROR': { {
+      color = 'red';
+      // No default
+      }
+      break;
+      }
+      }
       
       parts.push(this.colorize(`[${level}]`, color));
     }

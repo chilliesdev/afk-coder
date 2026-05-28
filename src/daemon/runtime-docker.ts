@@ -130,7 +130,7 @@ export class DockerRuntime implements ExecutionRuntime {
           stream.on('error', () => resolve());
           setTimeout(() => resolve(), 5000);
         });
-      } catch (error: any) {
+      } catch {
         // Ignore chown errors to ensure stop() always succeeds
       }
       try {

@@ -45,7 +45,7 @@ export class WorkflowExecutor {
     for (const cb of this.onFinishedCallbacks) {
       try {
         cb();
-      } catch (e) {
+      } catch {
         // ignore
       }
     }

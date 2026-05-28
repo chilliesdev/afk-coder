@@ -337,7 +337,7 @@ export class WorkflowManager extends EventEmitter {
 
   getLogs(name?: string, options: { tail?: number, offset?: number, daemon?: boolean } = {}) {
     const { ConfigManager, getLogsDir } = require('../common/config');
-    let configDir: string | undefined = undefined;
+    let configDir: string | undefined;
     if (name && name !== 'daemon') {
       const executor = this.workflows.get(name);
       if (executor) {
@@ -374,7 +374,7 @@ export class WorkflowManager extends EventEmitter {
       return { content: 'No logs found.', nextOffset: 0 };
     }
 
-    let allLines: { line: string, timestamp: number }[] = [];
+    const allLines: { line: string, timestamp: number }[] = [];
     for (const file of logFiles) {
       const logFile = path.join(logsDir, file);
       allLines.push(...this.readLogLines(logFile));

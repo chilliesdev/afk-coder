@@ -59,15 +59,15 @@ export class Spinner {
     const symbol = success ? (process.stdout.isTTY ? '\u001B[32m✔\u001B[0m' : '✔') : (process.stdout.isTTY ? '\u001B[31m✖\u001B[0m' : '✖');
     const message = finalMessage || this.message;
 
-    if (!process.stdout.isTTY) {
-      console.log(`${symbol} ${message}`);
-    } else {
+    if (process.stdout.isTTY) {
       readline.cursorTo(process.stdout, 0);
       readline.clearLine(process.stdout, 0);
       process.stdout.write(`${symbol} ${message}\n`);
 
       // Show cursor
       process.stdout.write('\u001B[?25h');
+    } else {
+      console.log(`${symbol} ${message}`);
     }
 
     this.isActive = false;
