@@ -14,6 +14,12 @@ import { FileSystemTaskStorage } from './task-storage';
 import { OutcomeAnalyzer } from './agent-outcome';
 import { GeminiAdapter } from './agent-gemini';
 import { AiderAdapter } from './agent-aider';
+import { AgentAdapterRegistry } from './agent-adapter';
+import { IpcHandler } from './ipc-handler';
+
+// Register default adapters
+AgentAdapterRegistry.register('gemini', GeminiAdapter);
+AgentAdapterRegistry.register('aider', AiderAdapter);
 
 const configManager = new ConfigManager();
 const config = configManager.loadConfig();
@@ -67,7 +73,7 @@ export const daemonLogger = winston.createLogger({
 
 const agentFactory: AgentFactory = (agentName?: string) => {
   const name = agentName || config.daemon?.agent || 'gemini';
-  const adapter = name === 'aider' ? new AiderAdapter() : new GeminiAdapter();
+  const adapter = AgentAdapterRegistry.get(name);
   const agentRuntime = new DockerRuntime(configManager);
   return new Agent(agentRuntime, new OutcomeAnalyzer(), adapter);
 };
@@ -76,6 +82,8 @@ const workflowManager = new WorkflowManager(
   agentFactory,
   (p) => new TaskBoard(new FileSystemTaskStorage(p), validator)
 );
+
+const ipcHandler = new IpcHandler(workflowManager, daemonLogger);
 
 let SOCKET_PATH = process.env.AFK_CODER_SOCKET || config.daemon?.socketPath;
 
@@ -121,170 +129,7 @@ const server = net.createServer((socket) => {
   });
 
   socket.on('data', async (data) => {
-    let keepOpen = false;
-    let request: any = null;
-    try {
-      request = JSON.parse(data.toString());
-      let response: DaemonResponse = { success: true };
-
-      switch (request.command) {
-        case 'init': {
-          const initResult = await workflowManager.init(request.args, (milestone) => {
-            socket.write(JSON.stringify(milestone) + '\n');
-          });
-          response = { success: initResult.success, message: initResult.error, data: initResult.logs };
-          break;
-        }
-        case 'start': {
-          const startArgs = request.args as StartWorkflowRequestArgs;
-          const workflow = await workflowManager.startWorkflow(startArgs.name, startArgs.dir, {
-            configDir: startArgs.configDir,
-            isWorktree: startArgs.isWorktree,
-            sourceRepo: startArgs.sourceRepo,
-            branch: startArgs.branch,
-            agent: startArgs.agent,
-          });
-          response = { success: true, data: workflow };
-          break;
-        }
-        case 'list': {
-          response = { success: true, data: workflowManager.listWorkflows() };
-          break;
-        }
-        case 'status': {
-          const wf = workflowManager.getWorkflow(request.args.name);
-          if (!wf) {
-            response = { success: false, message: `Workflow ${request.args.name} not found` };
-            break;
-          }
-          response = { success: true, data: wf };
-          break;
-        }
-        case 'kill': {
-          await workflowManager.killWorkflow(request.args.name);
-          response = { success: true, message: `Killed ${request.args.name}` };
-          break;
-        }
-        case 'remove': {
-          const wf = workflowManager.getWorkflow(request.args.name);
-          const dir = wf?.dir;
-          const isWorktree = wf?.isWorktree;
-          await workflowManager.removeWorkflow(request.args.name, undefined, request.args.deleteDir);
-          response = { success: true, message: `Removed ${request.args.name}`, data: { dir, isWorktree } };
-          break;
-        }
-        case 'logs': {
-          const isDaemon = request.args.daemon || request.args.name === 'daemon';
-          if (request.args.follow) {
-            if (!isDaemon && request.args.name) {
-              const executor = workflowManager.getExecutor(request.args.name);
-              if (!executor) {
-                throw new Error(`Workflow ${request.args.name} not found`);
-              }
-            }
-
-            keepOpen = true;
-            socket.write(JSON.stringify({ success: true }) + '\n');
-            const initialLogs = workflowManager.getLogs(isDaemon ? 'daemon' : request.args.name, {
-              tail: request.args.tail ? Number.parseInt(request.args.tail) : 20,
-              daemon: isDaemon
-            });
-            if (initialLogs && initialLogs.content) {
-              const lines = initialLogs.content.split('\n');
-              for (const line of lines) {
-                if (line.trim()) {
-                  socket.write(JSON.stringify({ type: 'log', content: line }) + '\n');
-                }
-              }
-            }
-
-            if (isDaemon) {
-              const logListener = (info: any) => {
-                socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
-              };
-              daemonLogger.on('data', logListener);
-
-              const cleanup = () => {
-                daemonLogger.off('data', logListener);
-              };
-
-              socket.on('close', cleanup);
-              socket.on('error', cleanup);
-            } else if (request.args.name) {
-              const executor = workflowManager.getExecutor(request.args.name);
-              const isRunning = executor &&
-                                executor.status !== 'Done' && 
-                                executor.status !== 'Killed' && 
-                                !executor.status.startsWith('Failed');
-
-              if (isRunning) {
-                const logListener = (name: string, info: any) => {
-                  if (name === request.args.name) {
-                    socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
-                  }
-                };
-                workflowManager.on('log', logListener);
-
-                const unsubscribeFinish = executor.onFinished(() => {
-                  cleanup();
-                  socket.end();
-                });
-
-                const cleanup = () => {
-                  workflowManager.off('log', logListener);
-                  unsubscribeFinish();
-                };
-
-                socket.on('close', cleanup);
-                socket.on('error', cleanup);
-              } else {
-                socket.end();
-              }
-            } else {
-              // Consolidated logs follow mode - stream indefinitely from all workflows
-              const logListener = (name: string, info: any) => {
-                socket.write(JSON.stringify({ type: 'log', content: JSON.stringify(info) }) + '\n');
-              };
-              workflowManager.on('log', logListener);
-
-              const cleanup = () => {
-                workflowManager.off('log', logListener);
-              };
-
-              socket.on('close', cleanup);
-              socket.on('error', cleanup);
-            }
-            break;
-          }
-          response = { success: true, data: workflowManager.getLogs(isDaemon ? 'daemon' : request.args.name, {
-            tail: request.args.tail ? Number.parseInt(request.args.tail) : undefined,
-            offset: request.args.offset === undefined ? undefined : Number.parseInt(request.args.offset),
-            daemon: isDaemon
-          }) };
-          break;
-        }
-        default: {
-          response = { success: false, message: 'Unknown command' };
-        }
-      }
-
-      if (!keepOpen) {
-        socket.write(JSON.stringify(response) + '\n');
-      }
-    } catch (error: any) {
-      daemonLogger.error('IPC command execution failed', {
-        command: request?.command,
-        args: request?.args,
-        error: error.message,
-        stack: error.stack,
-      });
-      socket.write(JSON.stringify({ success: false, message: error.message }) + '\n');
-      keepOpen = false;
-    } finally {
-      if (!keepOpen) {
-        socket.end();
-      }
-    }
+    await ipcHandler.handleConnection(socket, data);
   });
 });
 

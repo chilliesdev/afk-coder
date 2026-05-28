@@ -61,7 +61,9 @@ export class WorkflowExecutor {
     isWorktree?: boolean,
     sourceRepo?: string,
     branch?: string,
-    gitClient?: GitClient
+    gitClient?: GitClient,
+    codingPhase?: WorkflowPhase,
+    qaPhase?: WorkflowPhase
   ) {
     this.name = name;
     this.dir = dir;
@@ -74,8 +76,8 @@ export class WorkflowExecutor {
     this.branch = branch;
     this.uptimeStart = Date.now();
     
-    this.codingPhase = new CodingPhaseAdapter();
-    this.qaPhase = new QaPhaseAdapter();
+    this.codingPhase = codingPhase || new CodingPhaseAdapter();
+    this.qaPhase = qaPhase || new QaPhaseAdapter();
     this.git = gitClient || new ShellGitClient(dir);
   }
 
