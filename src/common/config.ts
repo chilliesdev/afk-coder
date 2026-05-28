@@ -17,6 +17,11 @@ export interface Config {
     socketGroup?: string;
     socketPath?: string;
     agent?: string;
+    logDir?: string;
+    logRotation?: {
+      maxSize?: number;
+      maxFiles?: number;
+    };
   };
   auth?: {
     clientId: string;
@@ -39,6 +44,10 @@ const DEFAULT_CONFIG: Config = {
     socketGroup: 'afk-coder-users',
     socketPath: '/tmp/afk-coder.sock',
     agent: 'gemini',
+    logRotation: {
+      maxSize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 5,
+    },
   },
   auth: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
@@ -50,6 +59,14 @@ const DEFAULT_CONFIG: Config = {
     autoCommit: false,
   },
 };
+
+export function getLogsDir(config?: Config): string {
+  if (config?.daemon?.logDir) {
+    return config.daemon.logDir;
+  }
+  const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+  return path.join(stateHome, 'afk-coder', 'logs');
+}
 
 
 export class ConfigManager {
@@ -85,6 +102,10 @@ export class ConfigManager {
         daemon: {
           ...DEFAULT_CONFIG.daemon,
           ...userConfig.daemon,
+          logRotation: {
+            ...DEFAULT_CONFIG.daemon?.logRotation,
+            ...userConfig.daemon?.logRotation,
+          },
         },
         auth: {
           ...DEFAULT_CONFIG.auth,

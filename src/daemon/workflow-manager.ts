@@ -34,9 +34,35 @@ export class WorkflowManager {
     this.gitClientFactory = gitClientFactory;
   }
 
-  private getOrCreateLogger(name: string, dir: string): winston.Logger {
+  private getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger {
     if (this.loggers.has(name)) {
       return this.loggers.get(name)!;
+    }
+
+    const { ConfigManager, getLogsDir } = require('../common/config');
+    const configManager = new ConfigManager(configDir);
+    const config = configManager.loadConfig();
+    const logsDir = getLogsDir(config);
+
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const logFile = path.join(logsDir, `${name}.json.log`);
+
+    let maxSize = 10 * 1024 * 1024; // 10MB default
+    let maxFiles = 5;
+
+    if (config.daemon?.logRotation?.maxSize !== undefined) {
+      const sizeVal = Number(config.daemon.logRotation.maxSize);
+      if (!isNaN(sizeVal) && sizeVal >= 0) {
+        maxSize = sizeVal;
+      }
+    }
+    if (config.daemon?.logRotation?.maxFiles !== undefined) {
+      const filesVal = Number(config.daemon.logRotation.maxFiles);
+      if (!isNaN(filesVal) && filesVal >= 0) {
+        maxFiles = filesVal;
+      }
     }
 
     const logger = winston.createLogger({
@@ -47,7 +73,12 @@ export class WorkflowManager {
       ),
       defaultMeta: { workflow: name },
       transports: [
-        new winston.transports.File({ filename: path.join(dir, 'workflow.json.log') }),
+        new winston.transports.File({
+          filename: logFile,
+          maxsize: maxSize,
+          maxFiles: maxFiles,
+          tailable: true,
+        }),
       ],
     });
 
@@ -120,7 +151,7 @@ export class WorkflowManager {
       throw new Error(`No pending tasks found in tasks.md in ${dir}`);
     }
 
-    const logger = this.getOrCreateLogger(name, dir);
+    const logger = this.getOrCreateLogger(name, dir, options.configDir);
     const agent = this.agentFactory(options.agent);
     const executor = new WorkflowExecutor(
       name,
@@ -286,7 +317,11 @@ export class WorkflowManager {
     if (!executor) {
       throw new Error(`Workflow ${name} not found`);
     }
-    const logFile = path.join(executor.dir, 'workflow.json.log');
+    const { ConfigManager, getLogsDir } = require('../common/config');
+    const configManager = new ConfigManager(executor.configDir);
+    const config = configManager.loadConfig();
+    const logsDir = getLogsDir(config);
+    const logFile = path.join(logsDir, `${name}.json.log`);
     if (!fs.existsSync(logFile)) {
       return { content: 'No logs found.', nextOffset: 0 };
     }

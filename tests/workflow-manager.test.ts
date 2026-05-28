@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'node:child_process';
 import { MockGitClient } from '../src/common/git';
+import * as winston from 'winston';
 
 jest.mock('node:child_process', () => ({
   execSync: jest.fn()
@@ -19,6 +20,8 @@ describe('WorkflowManager', () => {
   let inMemoryStorage: InMemoryTaskStorage;
   const testDir = path.resolve('./test-workflow-manager');
   const sourceRepoDir = path.resolve('./test-workflow-manager-source');
+  const testStateDir = path.resolve('./test-xdg-state');
+  let originalXdgStateHome: string | undefined;
 
   const resetBoard = async (content: string) => {
     await inMemoryStorage.write(content);
@@ -32,8 +35,16 @@ describe('WorkflowManager', () => {
     if (fs.existsSync(sourceRepoDir)) {
       fs.rmSync(sourceRepoDir, { recursive: true, force: true });
     }
+    if (fs.existsSync(testStateDir)) {
+      fs.rmSync(testStateDir, { recursive: true, force: true });
+    }
     fs.mkdirSync(testDir);
     fs.mkdirSync(sourceRepoDir);
+    fs.mkdirSync(testStateDir);
+
+    originalXdgStateHome = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = testStateDir;
+
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# PRD\nTest PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     (execSync as jest.Mock).mockClear();
@@ -52,6 +63,7 @@ describe('WorkflowManager', () => {
 
   afterEach(async () => {
     jest.useRealTimers();
+    process.env.XDG_STATE_HOME = originalXdgStateHome;
     if (workflowManager) {
       const workflows = workflowManager.listWorkflows();
       for (const wf of workflows) {
@@ -69,6 +81,11 @@ describe('WorkflowManager', () => {
     if (fs.existsSync(sourceRepoDir)) {
       try {
         fs.rmSync(sourceRepoDir, { recursive: true, force: true });
+      } catch {}
+    }
+    if (fs.existsSync(testStateDir)) {
+      try {
+        fs.rmSync(testStateDir, { recursive: true, force: true });
       } catch {}
     }
     const testConfigDir = path.resolve('./test-config-wt-commit');
@@ -1150,7 +1167,7 @@ describe('WorkflowManager', () => {
       await resetBoard('- [ ] Task 1');
       await workflowManager.startWorkflow('wf-filter-1', testDir);
 
-      const logFile = path.join(testDir, 'workflow.json.log');
+      const logFile = path.join(testStateDir, 'afk-coder', 'logs', 'wf-filter-1.json.log');
       const mockLogEntries = [
         JSON.stringify({ workflow: 'wf-filter-1', message: 'log 1' }),
         JSON.stringify({ workflow: 'wf-filter-2', message: 'log 2' }),
@@ -1201,6 +1218,101 @@ describe('WorkflowManager', () => {
       expect(offsetLogs.content).not.toContain('init 2');
 
       await workflowManager.killWorkflow('wf-filter-1');
+    });
+  });
+
+  describe('Log Rotation and Retention Limits', () => {
+    it('should initialize Winston file transport with configured logRotation limits', async () => {
+      const testConfigDir = path.resolve('./test-config-wt-commit');
+      if (fs.existsSync(testConfigDir)) {
+        fs.rmSync(testConfigDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(testConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(testConfigDir, 'config.json'),
+        JSON.stringify({
+          daemon: {
+            logRotation: {
+              maxSize: 12345,
+              maxFiles: 42
+            }
+          }
+        })
+      );
+
+      const logger = (workflowManager as any).getOrCreateLogger('test-rotate-1', testDir, testConfigDir);
+      const fileTransport = logger.transports.find((t: any) => t instanceof winston.transports.File);
+
+      expect(fileTransport).toBeDefined();
+      expect(fileTransport.maxsize).toBe(12345);
+      expect(fileTransport.maxFiles).toBe(42);
+      expect(fileTransport.tailable).toBe(true);
+
+      fs.rmSync(testConfigDir, { recursive: true, force: true });
+    });
+
+    it('should initialize Winston file transport with default limits when not configured', async () => {
+      const testConfigDir = path.resolve('./test-config-wt-commit-default');
+      if (fs.existsSync(testConfigDir)) {
+        fs.rmSync(testConfigDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(testConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(testConfigDir, 'config.json'),
+        JSON.stringify({
+          daemon: {}
+        })
+      );
+
+      const logger = (workflowManager as any).getOrCreateLogger('test-rotate-2', testDir, testConfigDir);
+      const fileTransport = logger.transports.find((t: any) => t instanceof winston.transports.File);
+
+      expect(fileTransport).toBeDefined();
+      expect(fileTransport.maxsize).toBe(10 * 1024 * 1024); // 10MB default
+      expect(fileTransport.maxFiles).toBe(5); // 5 files default
+
+      fs.rmSync(testConfigDir, { recursive: true, force: true });
+    });
+
+    it('should fallback to defaults when invalid/negative logRotation values are configured', async () => {
+      const testConfigDir = path.resolve('./test-config-wt-commit-invalid');
+      if (fs.existsSync(testConfigDir)) {
+        fs.rmSync(testConfigDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(testConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(testConfigDir, 'config.json'),
+        JSON.stringify({
+          daemon: {
+            logRotation: {
+              maxSize: -500, // negative size
+              maxFiles: "invalid-string" // invalid files
+            }
+          }
+        })
+      );
+
+      const logger = (workflowManager as any).getOrCreateLogger('test-rotate-3', testDir, testConfigDir);
+      const fileTransport = logger.transports.find((t: any) => t instanceof winston.transports.File);
+
+      expect(fileTransport).toBeDefined();
+      expect(fileTransport.maxsize).toBe(10 * 1024 * 1024); // 10MB fallback
+      expect(fileTransport.maxFiles).toBe(5); // 5 files fallback
+
+      fs.rmSync(testConfigDir, { recursive: true, force: true });
+    });
+
+    it('should create logs directory and store the log file in the resolved directory', async () => {
+      const logger = (workflowManager as any).getOrCreateLogger('test-rotate-4', testDir);
+      const fileTransport = logger.transports.find((t: any) => t instanceof winston.transports.File);
+
+      expect(fileTransport).toBeDefined();
+      const expectedLogDir = path.join(testStateDir, 'afk-coder', 'logs');
+      const expectedLogFile = path.join(expectedLogDir, 'test-rotate-4.json.log');
+      
+      expect(fs.existsSync(expectedLogDir)).toBe(true);
+      expect(fileTransport.dirname).toBe(expectedLogDir);
+      expect(fileTransport.filename).toBe('test-rotate-4.json.log');
     });
   });
 });

@@ -8,12 +8,22 @@ describe('WorkflowManager Status Updates', () => {
   let workflowManager: WorkflowManager;
   let mockRuntime: MockRuntime;
   const testDir = path.resolve('./test-status-unit');
+  const testStateDir = path.resolve('./test-status-xdg-state');
+  let originalXdgStateHome: string | undefined;
 
   beforeEach(() => {
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
+    if (fs.existsSync(testStateDir)) {
+      fs.rmSync(testStateDir, { recursive: true, force: true });
+    }
     fs.mkdirSync(testDir);
+    fs.mkdirSync(testStateDir);
+
+    originalXdgStateHome = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = testStateDir;
+
     fs.writeFileSync(path.join(testDir, 'PRD.md'), '# Dummy PRD');
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1\n- [ ] Task 2\n- [ ] Task 3\n- [ ] Task 4\n- [ ] Task 5\n- [ ] Task 6');
 
@@ -23,8 +33,12 @@ describe('WorkflowManager Status Updates', () => {
   });
 
   afterEach(() => {
+    process.env.XDG_STATE_HOME = originalXdgStateHome;
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(testStateDir)) {
+      fs.rmSync(testStateDir, { recursive: true, force: true });
     }
   });
 
@@ -79,7 +93,7 @@ describe('WorkflowManager Status Updates', () => {
 
     workflow = workflowManager.getWorkflow('test-wf')!;
     if (workflow.status !== 'Done') {
-      const logFile = path.join(testDir, 'workflow.json.log');
+      const logFile = path.join(testStateDir, 'afk-coder', 'logs', 'test-wf.json.log');
       if (fs.existsSync(logFile)) {
         console.log('Workflow Logs on Failure:');
         console.log(fs.readFileSync(logFile, 'utf-8'));
