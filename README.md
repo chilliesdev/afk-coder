@@ -87,17 +87,42 @@ The daemon will automatically detect and forward this key to the sandboxed runti
 *   `GEMINI_CLI_AUTH_METHOD` & `GEMINI_PROJECT_ID`: If set on the host, these variables are forwarded to the sandboxed runtime container to customize the Gemini CLI configuration.
 
 ### Configuration File
-You can customize the daemon and sandbox behavior by editing `~/.config/afk-coder/config.json`.
+You can customize the daemon and sandbox behavior by editing `~/.config/afk-coder/config.json` directly or using the `afk config` CLI commands.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `daemon.socketGroup` | `"afk-coder-users"` | The Unix group that will own the control socket. |
 | `daemon.socketPath` | `"/tmp/afk-coder.sock"` | The path to the daemon's control socket. |
 | `daemon.agent` | `"gemini"` | The default agent adapter to use for tasks (e.g., `"gemini"`, `"aider"`). |
+| `daemon.logDir` | *Dynamic (XDG state path)* | Directory where daemon and workflow logs are written. Defaults to `~/.local/state/afk-coder/logs`. |
+| `daemon.logLevel` | `"info"` | Logging verbosity (`error`, `warn`, `info`, `http`, `verbose`, `debug`, `silly`). |
+| `daemon.logRotation.maxSize` | `10485760` (10MB) | Max size of individual log files in bytes before rotation. |
+| `daemon.logRotation.maxFiles` | `5` | Max number of rotated log files to retain. |
 | `sandbox.image` | `"us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0"` | The Docker image used for the execution sandbox. |
-| `sandbox.memory` | `2147483648` | Memory limit for the sandbox (bytes). |
-| `sandbox.nanoCpus` | `2000000000` | CPU limit for the sandbox (nano CPUs). |
+| `sandbox.memory` | `2147483648` | Memory limit for the sandbox container (bytes). |
+| `sandbox.nanoCpus` | `2000000000` | CPU limit for the sandbox container (nano CPUs). |
+| `auth.clientId` | `""` | Persistent Google Cloud Client ID for the OAuth flow. |
+| `auth.clientSecret` | `""` | Persistent Google Cloud Client Secret for the OAuth flow. |
+| `auth.scopes` | `["https://www.googleapis.com/auth/cloud-platform"]` | Google OAuth 2.0 API scopes. |
 | `auth.redirectUri` | `"http://localhost:3000"` | The redirect URI for the OAuth 2.0 flow. |
+| `git.autoCommit` | `false` | Enable to automatically generate git commits for each task completed and upon completion/failure. |
+
+### CLI Configuration Utility
+Use the built-in `afk config` commands to view or modify settings:
+```bash
+# Display the entire configuration file
+afk config show
+
+# Get a configuration value (supports dot-notation)
+afk config get daemon.agent
+
+# Set a configuration value (automatically coerces booleans, numbers, arrays, and null)
+afk config set git.autoCommit true
+afk config set daemon.logLevel debug
+
+# Open the config.json file in your default system editor (e.g., nano, vim, notepad)
+afk config edit
+```
 
 ---
 
@@ -139,7 +164,7 @@ afk start my-feature --dir /path/to/project
 To run the workflow in an isolated git worktree, use the `-w` or `--worktree` flag. If `--dir` and `--branch` are not provided, they will be automatically generated with a random suffix based on the workflow name to avoid conflicts:
 ```bash
 afk start my-feature -w
-# This creates a worktree directory like ./my-feature-5a1b3c and a branch named my-feature-5a1b3c
+# This creates a worktree directory like ./.afk-coder/worktress/my-feature-5a1b3c and a branch named my-feature-5a1b3c
 ```
 You can also explicitly specify the branch and directory if desired:
 ```bash
@@ -167,12 +192,16 @@ afk logs my-feature -f
 | :--- | :--- |
 | `init [--dir <path>] [--prd <filename>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. `--dir` defaults to `.`, and `--prd` defaults to `PRD.md`. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
-| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Runs in a git worktree via `-w` or `--worktree`. If `--dir` or `--branch` are omitted when running in a worktree, they are automatically generated using the workflow name and a random suffix to prevent collisions. Specifying `--agent` selects the agent adapter (e.g. `gemini` or `aider`). |
+| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Runs in a git worktree via `-w` or `--worktree`. If `--dir` or `--branch` are omitted when running in a worktree, they are automatically generated as `.afk-coder/worktress/<name>-<randomSuffix>` (configuring `safe.directory` automatically). Specifying `--agent` selects the agent adapter (e.g. `gemini` or `aider`). |
 | `list` | Lists all active and completed workflows. |
-| `status <name>` | Shows detailed status, phase, and QA cycles of a workflow. |
-| `logs <name> [-f\|--follow] [--tail <lines>]` | Streams or outputs workflow execution logs. Use `-f` or `--follow` to stream logs. |
+| `status <name> [--no-color]` | Shows detailed status, progress, phase, QA cycles, token usage, and recent tasks. Use `--no-color` to disable colored output. |
+| `logs <name> [-f\|--follow] [--tail <lines>] [--json] [--raw] [--no-color]` | Streams or outputs workflow execution logs. Use `-f` to follow logs, `--tail <lines>` to specify lines count, `--json` for raw JSON logs, `--raw` for unformatted file output, and `--no-color` to disable color. |
 | `kill <name>` | Terminates a running workflow. |
-| `remove <name> [-d\|--delete-dir]` | Cleans up a finished or failed workflow from the daemon. By default, it preserves the directory (untracking/pruning the worktree in git). If `-d` or `--delete-dir` is specified, it deletes the directory from disk (asking for confirmation for non-worktree setups). |
+| `remove <name> [-d\|--delete-dir]` | Cleans up a finished or failed workflow from the daemon. Archives `tasks.md` and `PRD.md` to `.afk-coder/tasks/<name>/`. Automatically creates a git commit of uncommitted work if `git.autoCommit` is enabled (generating messages via AI). Performs permission cleanup (using a temporary `chown` Docker container if host directory deletion fails). Use `-d` or `--delete-dir` to delete the directory from disk (requires confirmation for non-worktree setups). |
+| `config show` | Prints the active JSON configuration to the console. |
+| `config get <key>` | Gets a configuration value (supports dot-notation, e.g. `daemon.agent`). |
+| `config set <key> <value>` | Sets a configuration value with dot-notation support and type coercion. |
+| `config edit` | Opens the configuration file in your default system editor. |
 
 ### Daemon CLI Options (`afk-coder-daemon`)
 When running the daemon binary directly (e.g., for development or debugging):
