@@ -28,8 +28,7 @@ export class WorkflowExecutor {
   private taskBoard: ITaskBoard;
   private logger: winston.Logger;
   
-  private codingPhase: WorkflowPhase;
-  private qaPhase: WorkflowPhase;
+  private phases: Map<string, WorkflowPhase> = new Map();
   public readonly git: GitClient;
 
   private onFinishedCallbacks: (() => void)[] = [];
@@ -76,8 +75,8 @@ export class WorkflowExecutor {
     this.branch = branch;
     this.uptimeStart = Date.now();
     
-    this.codingPhase = codingPhase || new CodingPhaseAdapter();
-    this.qaPhase = qaPhase || new QaPhaseAdapter();
+    this.phases.set('Coding', codingPhase || new CodingPhaseAdapter());
+    this.phases.set('QA', qaPhase || new QaPhaseAdapter());
     this.git = gitClient || new ShellGitClient(dir);
   }
 
@@ -158,7 +157,11 @@ export class WorkflowExecutor {
           };
 
           try {
-            const nextPhase = await (this.phase === 'Coding' ? this.codingPhase.execute(context) : this.qaPhase.execute(context));
+            const phaseExecutor = this.phases.get(this.phase);
+            if (!phaseExecutor) {
+              throw new Error(`Unknown workflow phase: ${this.phase}`);
+            }
+            const nextPhase = await phaseExecutor.execute(context);
 
             if (this.status === 'Killed') break;
 

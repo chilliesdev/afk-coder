@@ -378,7 +378,7 @@ export class Agent {
     const jsonEnd = logs.lastIndexOf('}');
     if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
       try {
-        const parsed = JSON.parse(logs.substring(jsonStart, jsonEnd + 1));
+        const parsed = JSON.parse(logs.slice(jsonStart, jsonEnd + 1));
         if (parsed && typeof parsed === 'object' && parsed.response !== undefined) {
           return parsed.response;
         }

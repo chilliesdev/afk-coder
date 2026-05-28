@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/prefer-event-target */
 import { Workflow, TaskBoard as ITaskBoard, MilestoneEvent, MILESTONE_STATUS, MILESTONE_TYPE, MilestoneStatus } from '../common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -11,98 +12,46 @@ import { TaskValidator } from '../common/validation';
 import { OutcomeAnalyzer } from './agent-outcome';
 import { Agent } from './agent';
 import { WorkflowExecutor } from './workflow-executor';
+import { WorkflowFileSystem, DefaultWorkflowFileSystem } from './workflow-fs';
+import { WorkflowLogger, DefaultWorkflowLogger } from './workflow-logger';
 
 export type AgentFactory = (agentName?: string) => Agent;
 export type GitClientFactory = (dir: string) => GitClient;
 
 export class WorkflowManager extends EventEmitter {
   private workflows: Map<string, WorkflowExecutor> = new Map();
-  private loggers: Map<string, winston.Logger> = new Map();
   private agentFactory: AgentFactory;
   private taskBoardFactory: (path: string) => ITaskBoard;
   private evaluator: OutcomeAnalyzer;
   private gitClientFactory: GitClientFactory;
+  private fileSystem: WorkflowFileSystem;
+  private workflowLogger: WorkflowLogger;
 
   constructor(
     agentFactory: AgentFactory, 
     taskBoardFactory: (path: string) => ITaskBoard = (p) => new TaskBoard(new FileSystemTaskStorage(p), new TaskValidator()),
     evaluator: OutcomeAnalyzer = new OutcomeAnalyzer(),
-    gitClientFactory: GitClientFactory = (dir) => new ShellGitClient(dir)
+    gitClientFactory: GitClientFactory = (dir) => new ShellGitClient(dir),
+    fileSystem: WorkflowFileSystem = new DefaultWorkflowFileSystem(),
+    workflowLogger: WorkflowLogger = new DefaultWorkflowLogger()
   ) {
     super();
     this.agentFactory = agentFactory;
     this.taskBoardFactory = taskBoardFactory;
     this.evaluator = evaluator;
     this.gitClientFactory = gitClientFactory;
-  }
+    this.fileSystem = fileSystem;
+    this.workflowLogger = workflowLogger;
 
-  private safeMoveSync(src: string, dest: string) {
-    try {
-      fs.renameSync(src, dest);
-    } catch (error: any) {
-      if (error.code === 'EXDEV') {
-        fs.copyFileSync(src, dest);
-        fs.unlinkSync(src);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  private getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger {
-    if (this.loggers.has(name)) {
-      return this.loggers.get(name)!;
-    }
-
-    const { ConfigManager, getLogsDir } = require('../common/config');
-    const configManager = new ConfigManager(configDir);
-    const config = configManager.loadConfig();
-    const logsDir = getLogsDir(config);
-
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
-    const logFile = path.join(logsDir, `${name}.json.log`);
-
-    let maxSize = 10 * 1024 * 1024; // 10MB default
-    let maxFiles = 5;
-
-    if (config.daemon?.logRotation?.maxSize !== undefined) {
-      const sizeVal = Number(config.daemon.logRotation.maxSize);
-      if (!isNaN(sizeVal) && sizeVal >= 0) {
-        maxSize = sizeVal;
-      }
-    }
-    if (config.daemon?.logRotation?.maxFiles !== undefined) {
-      const filesVal = Number(config.daemon.logRotation.maxFiles);
-      if (!isNaN(filesVal) && filesVal >= 0) {
-        maxFiles = filesVal;
-      }
-    }
-
-    const logger = winston.createLogger({
-      level: config.daemon?.logLevel || 'info',
-      format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.json()
-      ),
-      defaultMeta: { workflow: name },
-      transports: [
-        new winston.transports.File({
-          filename: logFile,
-          maxsize: maxSize,
-          maxFiles: maxFiles,
-          tailable: true,
-        }),
-      ],
-    });
-
-    logger.on('data', (info) => {
+    // Forward 'log' events from workflowLogger
+    this.workflowLogger.on('log', (name, info) => {
       this.emit('log', name, info);
     });
+  }
 
-    this.loggers.set(name, logger);
-    return logger;
+  // Retained for tests and internal helper consistency
+  private getOrCreateLogger(name: string, dir: string, configDir?: string): winston.Logger {
+    return this.workflowLogger.getOrCreateLogger(name, dir, configDir);
   }
 
   async startWorkflow(name: string, dir: string, options: { configDir?: string, isWorktree?: boolean, sourceRepo?: string, branch?: string, agent?: string } = {}): Promise<Workflow> {
@@ -145,10 +94,10 @@ export class WorkflowManager extends EventEmitter {
       const destTasks = path.join(dir, 'tasks.md');
 
       if (fs.existsSync(srcPrd) && !fs.existsSync(destPrd)) {
-        this.safeMoveSync(srcPrd, destPrd);
+        this.fileSystem.safeMoveSync(srcPrd, destPrd);
       }
       if (fs.existsSync(srcTasks) && !fs.existsSync(destTasks)) {
-        this.safeMoveSync(srcTasks, destTasks);
+        this.fileSystem.safeMoveSync(srcTasks, destTasks);
       }
     }
 
@@ -170,7 +119,7 @@ export class WorkflowManager extends EventEmitter {
       throw new Error(`No pending tasks found in tasks.md in ${dir}`);
     }
 
-    const logger = this.getOrCreateLogger(name, dir, options.configDir);
+    const logger = this.workflowLogger.getOrCreateLogger(name, dir, options.configDir);
     const agent = this.agentFactory(options.agent);
     const executor = new WorkflowExecutor(
       name,
@@ -230,7 +179,7 @@ export class WorkflowManager extends EventEmitter {
 
     this.emitMilestone(onMilestone, MILESTONE_STATUS.STARTING, `Removing workflow ${name}...`);
 
-    const logger = this.loggers.get(name);
+    const logger = this.workflowLogger.getOrCreateLogger(name, executor.dir, executor.configDir);
 
     if (executor.isWorktree && executor.sourceRepo) {
       try {
@@ -249,7 +198,7 @@ export class WorkflowManager extends EventEmitter {
           this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Archived PRD.md to .afk-coder/tasks/${name}/`);
         }
       } catch (error: any) {
-        logger?.error(`Failed to archive workflow files: ${error.message}`);
+        logger.error(`Failed to archive workflow files: ${error.message}`);
         this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Failed to archive workflow files: ${error.message}`);
       }
     }
@@ -273,7 +222,7 @@ export class WorkflowManager extends EventEmitter {
           }
         }
       } catch (error: any) {
-        logger?.error(`Failed to auto-commit changes before removing workflow: ${error.message}`);
+        logger.error(`Failed to auto-commit changes before removing workflow: ${error.message}`);
         this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Skipped auto-commit due to error: ${error.message}`);
       }
     }
@@ -286,8 +235,8 @@ export class WorkflowManager extends EventEmitter {
           try {
             sourceGit.removeWorktree(executor.dir);
           } catch (gitError: any) {
-            logger?.warn(`Initial worktree removal failed: ${gitError.message}. Attempting permission fix...`);
-            this.ensureDirectoryWritable(executor.dir, executor.configDir, logger, onMilestone);
+            logger.warn(`Initial worktree removal failed: ${gitError.message}. Attempting permission fix...`);
+            this.fileSystem.ensureDirectoryWritable(executor.dir, executor.configDir, logger, onMilestone);
             this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Retrying git worktree removal...');
             sourceGit.removeWorktree(executor.dir);
           }
@@ -301,32 +250,23 @@ export class WorkflowManager extends EventEmitter {
           sourceGit.pruneWorktrees();
         }
       } catch (error: any) {
-        logger?.error(`Failed to remove/untrack worktree: ${error.message}`);
+        logger.error(`Failed to remove/untrack worktree: ${error.message}`);
         this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to remove/untrack git worktree: ${error.message}`);
         throw error;
       }
     } else if (!executor.isWorktree && deleteDir) {
       try {
         this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Deleting workflow directory...');
-        if (fs.existsSync(executor.dir)) {
-          try {
-            fs.rmSync(executor.dir, { recursive: true, force: true });
-          } catch (fsError: any) {
-            logger?.warn(`Initial directory deletion failed: ${fsError.message}. Attempting permission fix...`);
-            this.ensureDirectoryWritable(executor.dir, executor.configDir, logger, onMilestone);
-            this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Retrying directory deletion...');
-            fs.rmSync(executor.dir, { recursive: true, force: true });
-          }
-        }
+        this.fileSystem.deleteDirectory(executor.dir, executor.configDir, logger, onMilestone);
       } catch (error: any) {
-        logger?.error(`Failed to delete directory: ${error.message}`);
+        logger.error(`Failed to delete directory: ${error.message}`);
         this.emitMilestone(onMilestone, MILESTONE_STATUS.FAILED, `Failed to delete directory: ${error.message}`);
         throw error;
       }
     }
 
     this.workflows.delete(name);
-    this.loggers.delete(name);
+    this.workflowLogger.removeLogger(name);
     this.emitMilestone(onMilestone, MILESTONE_STATUS.COMPLETED, `Workflow ${name} successfully removed.`);
   }
 
@@ -336,140 +276,10 @@ export class WorkflowManager extends EventEmitter {
   }
 
   getLogs(name?: string, options: { tail?: number, offset?: number, daemon?: boolean } = {}) {
-    const { ConfigManager, getLogsDir } = require('../common/config');
-    let configDir: string | undefined;
-    if (name && name !== 'daemon') {
-      const executor = this.workflows.get(name);
-      if (executor) {
-        configDir = executor.configDir;
-      }
-    }
-    const configManager = new ConfigManager(configDir);
-    const config = configManager.loadConfig();
-    const logsDir = getLogsDir(config);
-
-    if (options.daemon || name === 'daemon') {
-      const logFile = path.join(logsDir, 'daemon.json.log');
-      if (!fs.existsSync(logFile)) {
-        return { content: 'No daemon logs found.', nextOffset: 0 };
-      }
-      return this.readSingleLogFile(logFile, undefined, options);
-    }
-
-    if (name) {
-      const logFile = path.join(logsDir, `${name}.json.log`);
-      if (!fs.existsSync(logFile)) {
-        return { content: 'No logs found.', nextOffset: 0 };
-      }
-      return this.readSingleLogFile(logFile, name, options);
-    }
-
-    // Read all workflow log files
-    if (!fs.existsSync(logsDir)) {
-      return { content: 'No logs found.', nextOffset: 0 };
-    }
-    const files = fs.readdirSync(logsDir);
-    const logFiles = files.filter(f => f.endsWith('.json.log') && f !== 'daemon.json.log');
-    if (logFiles.length === 0) {
-      return { content: 'No logs found.', nextOffset: 0 };
-    }
-
-    const allLines: { line: string, timestamp: number }[] = [];
-    for (const file of logFiles) {
-      const logFile = path.join(logsDir, file);
-      allLines.push(...this.readLogLines(logFile));
-    }
-
-    // Sort chronologically by timestamp
-    allLines.sort((a, b) => a.timestamp - b.timestamp);
-
-    let resultLines = allLines.map(l => l.line);
-    if (options.tail) {
-      resultLines = resultLines.slice(-options.tail);
-    }
-
-    const content = resultLines.join('\n') + (resultLines.length > 0 ? '\n' : '');
-    return { content, nextOffset: allLines.length };
-  }
-
-  private readSingleLogFile(logFile: string, filterName?: string, options: { tail?: number, offset?: number } = {}) {
-    const stats = fs.statSync(logFile);
-    const filterLogs = (rawContent: string): string => {
-      const lines = rawContent.split('\n');
-      const filtered = lines.filter(line => {
-        const trimmed = line.trim();
-        if (!trimmed) return false;
-        if (!filterName) return true;
-        try {
-          const parsed = JSON.parse(trimmed);
-          return parsed.workflow === filterName;
-        } catch {
-          return trimmed.includes(filterName);
-        }
-      });
-      return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
-    };
-
-    if (options.offset !== undefined) {
-      if (options.offset >= stats.size) {
-        return { content: '', nextOffset: stats.size };
-      }
-      const fd = fs.openSync(logFile, 'r');
-      const buffer = Buffer.alloc(stats.size - options.offset);
-      fs.readSync(fd, buffer, 0, buffer.length, options.offset);
-      fs.closeSync(fd);
-      const filteredContent = filterLogs(buffer.toString('utf-8'));
-      return { content: filteredContent, nextOffset: stats.size };
-    }
-
-    const content = fs.readFileSync(logFile, 'utf8');
-    const filteredContent = filterLogs(content);
-    if (options.tail) {
-      const lines = filteredContent.trim().split('\n');
-      const filteredLines = filteredContent.trim() ? lines : [];
-      return { content: filteredLines.slice(-options.tail).join('\n') + (filteredLines.length > 0 ? '\n' : ''), nextOffset: stats.size };
-    }
-    return { content: filteredContent, nextOffset: stats.size };
-  }
-
-  private readLogLines(logFile: string, filterName?: string): { line: string, timestamp: number }[] {
-    if (!fs.existsSync(logFile)) return [];
-    try {
-      const content = fs.readFileSync(logFile, 'utf8');
-      const rawLines = content.split('\n');
-      const parsedLines: { line: string, timestamp: number }[] = [];
-      let lastTimestamp = 0;
-      for (const rawLine of rawLines) {
-        const trimmed = rawLine.trim();
-        if (!trimmed) continue;
-        
-        let timestamp = lastTimestamp;
-        let isMatch = true;
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (filterName && parsed.workflow !== filterName) {
-            isMatch = false;
-          }
-          if (parsed.timestamp) {
-            const date = new Date(parsed.timestamp);
-            if (!isNaN(date.getTime())) {
-              timestamp = date.getTime();
-              lastTimestamp = timestamp;
-            }
-          }
-        } catch {
-          if (filterName && !trimmed.includes(filterName)) {
-            isMatch = false;
-          }
-        }
-        if (isMatch) {
-          parsedLines.push({ line: trimmed, timestamp });
-        }
-      }
-      return parsedLines;
-    } catch {
-      return [];
-    }
+    return this.workflowLogger.getLogs(name, options, (wfName) => {
+      const executor = this.workflows.get(wfName);
+      return executor?.configDir;
+    });
   }
 
   private emitMilestone(
@@ -486,36 +296,5 @@ export class WorkflowManager extends EventEmitter {
       });
     }
   }
-
-  private ensureDirectoryWritable(
-    dir: string,
-    configDir?: string,
-    logger?: winston.Logger,
-    onMilestone?: (milestone: MilestoneEvent) => void
-  ) {
-    try {
-      const uid = process.getuid ? process.getuid() : 1000;
-      const gid = process.getgid ? process.getgid() : 1000;
-
-      const { ConfigManager } = require('../common/config');
-      const configManager = new ConfigManager(configDir);
-      const config = configManager.loadConfig();
-      const image = config.sandbox?.image || 'us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.41.0';
-
-      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, 'Fixing worktree directory permissions using Docker...');
-      
-      const resolvedDir = path.resolve(dir);
-      const parentDir = path.dirname(resolvedDir);
-      const baseName = path.basename(resolvedDir);
-
-      const { execSync } = require('node:child_process');
-      execSync(
-        `docker run --rm -v "${parentDir}:/workspace" -w /workspace ${image} chown -R ${uid}:${gid} "${baseName}"`,
-        { stdio: 'ignore' }
-      );
-    } catch (error: any) {
-      logger?.error(`Failed to change directory permissions via Docker: ${error.message}`);
-      this.emitMilestone(onMilestone, MILESTONE_STATUS.INFO, `Docker permission fix failed: ${error.message}`);
-    }
-  }
 }
+

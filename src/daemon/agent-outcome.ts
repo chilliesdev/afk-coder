@@ -93,7 +93,7 @@ export class OutcomeAnalyzer {
     const jsonEnd = logs.lastIndexOf('}');
     if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
       try {
-        const parsed = JSON.parse(logs.substring(jsonStart, jsonEnd + 1));
+        const parsed = JSON.parse(logs.slice(jsonStart, jsonEnd + 1));
         return this.extractFromJson(parsed);
       } catch {
         // Fall back to line-by-line check

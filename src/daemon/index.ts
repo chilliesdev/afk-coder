@@ -4,7 +4,6 @@ import * as child_process from 'node:child_process';
 import * as path from 'node:path';
 import * as winston from 'winston';
 import { WorkflowManager, AgentFactory } from './workflow-manager';
-import { DaemonResponse, StartWorkflowRequestArgs } from '../common/types';
 import { ConfigManager, getLogsDir } from '../common/config';
 import { DockerRuntime } from './runtime-docker';
 import { Agent } from './agent';
@@ -16,6 +15,8 @@ import { GeminiAdapter } from './agent-gemini';
 import { AiderAdapter } from './agent-aider';
 import { AgentAdapterRegistry } from './agent-adapter';
 import { IpcHandler } from './ipc-handler';
+import { DefaultWorkflowFileSystem } from './workflow-fs';
+import { DefaultWorkflowLogger } from './workflow-logger';
 
 // Register default adapters
 AgentAdapterRegistry.register('gemini', GeminiAdapter);
@@ -80,7 +81,11 @@ const agentFactory: AgentFactory = (agentName?: string) => {
 
 const workflowManager = new WorkflowManager(
   agentFactory,
-  (p) => new TaskBoard(new FileSystemTaskStorage(p), validator)
+  (p) => new TaskBoard(new FileSystemTaskStorage(p), validator),
+  new OutcomeAnalyzer(),
+  undefined,
+  new DefaultWorkflowFileSystem(),
+  new DefaultWorkflowLogger()
 );
 
 const ipcHandler = new IpcHandler(workflowManager, daemonLogger);

@@ -62,7 +62,7 @@ export class LogFormatter {
     // 1. Timestamp [YYYY-MM-DD HH:mm:ss]
     if (log.timestamp) {
       const date = new Date(log.timestamp);
-      if (!isNaN(date.getTime())) {
+      if (!Number.isNaN(date.getTime())) {
         const ts = date.toISOString().replace('T', ' ').slice(0, 19);
         parts.push(this.colorize(`[${ts}]`, 'cyan'));
       }
