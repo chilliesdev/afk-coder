@@ -1,7 +1,10 @@
 import { Outcome, TokenUsage, AgentError, ExecutionDecision } from '../common/types';
 
 export class OutcomeAnalyzer {
-  constructor(private maxRetries: number = 3) {}
+  constructor(
+    private maxRetries: number = 3,
+    private baseDelayMs: number = 5000
+  ) {}
 
   analyze(
     logs: string,
@@ -24,7 +27,7 @@ export class OutcomeAnalyzer {
     if (exitCode === 0 && hasNewCompletedTasks) {
       return {
         action: 'next',
-        delayMs: 5000,
+        delayMs: this.baseDelayMs,
         tokens,
       };
     }
@@ -50,9 +53,9 @@ export class OutcomeAnalyzer {
       };
     }
 
-    let delayMs = Math.pow(2, nextRetry) * 5000;
+    let delayMs = Math.pow(2, nextRetry) * this.baseDelayMs;
     if (resolvedError.type === 'Quota') {
-      delayMs = Math.max(delayMs, 60_000);
+      delayMs = Math.max(delayMs, this.baseDelayMs === 0 ? 0 : 60_000);
     }
     return {
       action: 'retry',

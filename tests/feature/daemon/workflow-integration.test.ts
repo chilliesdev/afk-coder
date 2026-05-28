@@ -20,10 +20,23 @@ describe('WorkflowManager Integration', () => {
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     
     mockRuntime = new MockRuntime();
-    workflowManager = new WorkflowManager(() => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
+    const testAnalyzer = new OutcomeAnalyzer(3, 0);
+    workflowManager = new WorkflowManager(
+      () => new Agent(mockRuntime, testAnalyzer, new GeminiAdapter()),
+      undefined,
+      testAnalyzer
+    );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    if (workflowManager) {
+      const workflows = workflowManager.listWorkflows();
+      for (const wf of workflows) {
+        try {
+          await workflowManager.killWorkflow(wf.name);
+        } catch {}
+      }
+    }
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
@@ -60,7 +73,7 @@ describe('WorkflowManager Integration', () => {
     let attempts = 0;
     let workflow = workflowManager.getWorkflow('test-workflow')!;
     while (workflow.status !== 'Done' && workflow.status !== 'Failed' && attempts < 60) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 10));
       workflow = workflowManager.getWorkflow('test-workflow')!;
       attempts++;
     }
@@ -92,7 +105,7 @@ describe('WorkflowManager Integration', () => {
     // Wait for it to be Done
     let attempts = 0;
     while (workflowManager.listWorkflows().find(w => w.name === 'restart-test')?.status !== 'Done' && attempts < 100) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 10));
       attempts++;
     }
 

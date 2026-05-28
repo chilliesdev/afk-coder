@@ -5,13 +5,14 @@ import * as os from 'node:os';
 
 describe('Config CLI', () => {
   const TEST_CONFIG_DIR = path.join(os.tmpdir(), 'afk-coder-test-config-' + Math.random().toString(36).substring(7));
-  const BIN_PATH = path.resolve(__dirname, '../../../src/cli/index.ts');
-  const TS_NODE_BIN = path.resolve(__dirname, '../../../node_modules/.bin/ts-node');
+  const BIN_PATH = path.resolve(__dirname, '../../../dist/src/cli/index.js');
   
   beforeAll(() => {
     if (!fs.existsSync(TEST_CONFIG_DIR)) {
       fs.mkdirSync(TEST_CONFIG_DIR, { recursive: true });
     }
+    // Pre-compile the typescript files to dist/ so we can execute fast via raw node.js
+    execSync('npx tsc', { cwd: path.resolve(__dirname, '../../../') });
   });
 
   afterAll(() => {
@@ -23,7 +24,7 @@ describe('Config CLI', () => {
   const runCli = (args: string, env: any = {}) => {
     try {
       // Set HOME to our temp dir so it uses a fresh config
-      const output = execSync(`${TS_NODE_BIN} ${BIN_PATH} ${args}`, {
+      const output = execSync(`node ${BIN_PATH} ${args}`, {
         encoding: 'utf-8',
         timeout: 60000,
         env: { 

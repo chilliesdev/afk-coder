@@ -1583,7 +1583,12 @@ describe('WorkflowManager', () => {
 
       localMockRuntime = new MockRuntime();
       localMockRuntime.runDelay = 100;
-      localWorkflowManager = new WorkflowManager(() => new Agent(localMockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
+      const testAnalyzer = new OutcomeAnalyzer(3, 0);
+      localWorkflowManager = new WorkflowManager(
+        () => new Agent(localMockRuntime, testAnalyzer, new GeminiAdapter()),
+        undefined,
+        testAnalyzer
+      );
     });
 
     afterEach(async () => {

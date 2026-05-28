@@ -52,14 +52,33 @@ describe('Daemon Error Capture', () => {
   let processOnSpy: jest.SpyInstance;
   let processExitSpy: jest.SpyInstance;
   let loggerErrorSpy: jest.SpyInstance;
+  const processHandlers: Record<string, Function> = {};
 
   beforeAll(() => {
     processOnSpy = jest.spyOn(process, 'on').mockImplementation((event: any, cb: any) => {
+      processHandlers[event] = cb;
       return process;
     });
     processExitSpy = jest.spyOn(process, 'exit').mockImplementation((code?: any) => {
       throw new Error(`Process exited with code ${code}`);
     });
+
+    mockServer = {
+      listen: jest.fn((path, cb) => cb && cb()),
+      on: jest.fn((event, cb) => {
+        if (event === 'error') serverErrorListener = cb;
+        return mockServer;
+      }),
+    };
+
+    (net.createServer as jest.Mock).mockImplementation((cb) => {
+      connectionCallback = cb;
+      return mockServer;
+    });
+
+    // Evaluate the daemon module once to bind handlers
+    const daemonModule = require('../../../src/daemon/index');
+    daemonLogger = daemonModule.daemonLogger;
   });
 
   afterAll(() => {
@@ -79,25 +98,6 @@ describe('Daemon Error Capture', () => {
       write: jest.fn(),
       end: jest.fn(),
     };
-
-    mockServer = {
-      listen: jest.fn((path, cb) => cb && cb()),
-      on: jest.fn((event, cb) => {
-        if (event === 'error') serverErrorListener = cb;
-        return mockServer;
-      }),
-    };
-
-    (net.createServer as jest.Mock).mockImplementation((cb) => {
-      connectionCallback = cb;
-      return mockServer;
-    });
-
-    // Re-isolate index to bind our mocks
-    jest.isolateModules(() => {
-      const daemonModule = require('../../../src/daemon/index');
-      daemonLogger = daemonModule.daemonLogger;
-    });
 
     loggerErrorSpy = mockLoggerInstance.error;
   });
@@ -158,9 +158,8 @@ describe('Daemon Error Capture', () => {
   });
 
   it('should capture and log uncaught exceptions globally', () => {
-    const uncaughtCall = processOnSpy.mock.calls.find(call => call[0] === 'uncaughtException');
-    expect(uncaughtCall).toBeDefined();
-    const uncaughtHandler = uncaughtCall[1];
+    const uncaughtHandler = processHandlers['uncaughtException'];
+    expect(uncaughtHandler).toBeDefined();
 
     const testError = new Error('Uncaught Boom');
     (fs.existsSync as jest.Mock).mockReturnValue(true);
@@ -183,9 +182,8 @@ describe('Daemon Error Capture', () => {
   });
 
   it('should capture and log unhandled promise rejections globally', () => {
-    const unhandledCall = processOnSpy.mock.calls.find(call => call[0] === 'unhandledRejection');
-    expect(unhandledCall).toBeDefined();
-    const unhandledHandler = unhandledCall[1];
+    const unhandledHandler = processHandlers['unhandledRejection'];
+    expect(unhandledHandler).toBeDefined();
 
     const testError = new Error('Unhandled Promise Boom');
     unhandledHandler(testError);
@@ -200,9 +198,8 @@ describe('Daemon Error Capture', () => {
   });
 
   it('should clean up socket and exit on SIGINT and SIGTERM signals', () => {
-    const sigintCall = processOnSpy.mock.calls.find(call => call[0] === 'SIGINT');
-    expect(sigintCall).toBeDefined();
-    const sigintHandler = sigintCall[1];
+    const sigintHandler = processHandlers['SIGINT'];
+    expect(sigintHandler).toBeDefined();
 
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     try {
@@ -214,9 +211,8 @@ describe('Daemon Error Capture', () => {
     expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/afk-coder-err-test.sock');
     expect(processExitSpy).toHaveBeenCalled();
 
-    const sigtermCall = processOnSpy.mock.calls.find(call => call[0] === 'SIGTERM');
-    expect(sigtermCall).toBeDefined();
-    const sigtermHandler = sigtermCall[1];
+    const sigtermHandler = processHandlers['SIGTERM'];
+    expect(sigtermHandler).toBeDefined();
 
     jest.clearAllMocks();
     (fs.existsSync as jest.Mock).mockReturnValue(true);
