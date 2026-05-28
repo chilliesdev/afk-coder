@@ -2,8 +2,6 @@ import * as winston from 'winston';
 import { TaskBoard as ITaskBoard } from '../common/types';
 import { Agent } from './agent';
 import { TaskValidator } from '../common/validation';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 export interface WorkflowPhaseContext {
   dir: string;
@@ -66,19 +64,16 @@ export class QaPhaseAdapter implements WorkflowPhase {
        return `Failed: ${result.error || 'QA Agent execution failed'}`;
     }
 
-    const tasksPath = path.join(context.dir, 'tasks.md');
-    if (fs.existsSync(tasksPath)) {
-      const tasksContent = fs.readFileSync(tasksPath, 'utf-8');
-      const validator = new TaskValidator();
-      try {
-        validator.validateQATasks(tasksContent, previousTasks);
-      } catch (error: any) {
-        context.logger.error('QA task validation failed', { error: error.message });
-        return `Failed: QA Task Validation Error`;
-      }
+    const updatedBoardState = await context.taskBoard.load();
+    const currentTasks = updatedBoardState.tasks;
+    const validator = new TaskValidator();
+    try {
+      validator.validateQAParsedTasks(currentTasks, previousTasks);
+    } catch (error: any) {
+      context.logger.error('QA task validation failed', { error: error.message });
+      return `Failed: QA Task Validation Error`;
     }
 
-    const updatedBoardState = await context.taskBoard.load();
     const newPending = updatedBoardState.pendingTasks;
     
     if (newPending.length > 0) {

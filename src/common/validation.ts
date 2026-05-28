@@ -2,7 +2,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Task } from './types';
 
+export interface FileSystemReader {
+  existsSync(path: string): boolean;
+  readFileSync(path: string, encoding: 'utf8'): string;
+}
+
 export class TaskValidator {
+  constructor(private readonly fsReader: FileSystemReader = fs) {}
   parseTasks(content: string): Task[] {
     // Handle literal \n by replacing it with real newline
     const normalizedContent = content.replaceAll(String.raw`\n`, '\n');
@@ -38,14 +44,14 @@ export class TaskValidator {
     const prdPath = path.join(dir, 'PRD.md');
     const tasksPath = path.join(dir, 'tasks.md');
 
-    if (!fs.existsSync(prdPath)) {
+    if (!this.fsReader.existsSync(prdPath)) {
       throw new Error(`PRD.md not found in ${dir}`);
     }
-    if (!fs.existsSync(tasksPath)) {
+    if (!this.fsReader.existsSync(tasksPath)) {
       throw new Error(`tasks.md not found in ${dir}`);
     }
 
-    const tasksContent = fs.readFileSync(tasksPath, 'utf8');
+    const tasksContent = this.fsReader.readFileSync(tasksPath, 'utf8');
     this.validateTasks(tasksContent);
     
     const tasks = this.parseTasks(tasksContent);
@@ -58,8 +64,7 @@ export class TaskValidator {
     return { tasks, pendingTasks };
   }
 
-  validateQATasks(content: string, previousTasks: Task[]): void {
-    const currentTasks = this.parseTasks(content);
+  validateQAParsedTasks(currentTasks: Task[], previousTasks: Task[]): void {
     const newTasks = currentTasks.filter(curr => 
       !previousTasks.some(prev => prev.description === curr.description)
     );
@@ -69,5 +74,10 @@ export class TaskValidator {
         throw new Error(`QA-added task "${task.description}" is missing a valid PRD reference suffix (e.g. "[PRD: Section 1.2]").`);
       }
     }
+  }
+
+  validateQATasks(content: string, previousTasks: Task[]): void {
+    const currentTasks = this.parseTasks(content);
+    this.validateQAParsedTasks(currentTasks, previousTasks);
   }
 }

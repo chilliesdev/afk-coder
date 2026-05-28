@@ -6,7 +6,6 @@ import { OutcomeAnalyzer } from './agent-outcome';
 import { Task, TokenUsage, TaskBoard as ITaskBoard, MilestoneEvent, MilestoneStatus, MILESTONE_TYPE, MILESTONE_STATUS } from '../common/types';
 import * as winston from 'winston';
 import { AgentAdapter } from './agent-adapter';
-import { GeminiAdapter } from './agent-gemini';
 
 export interface AgentPhaseResult {
   success: boolean;
@@ -22,8 +21,8 @@ export class Agent {
 
   constructor(
     private readonly runtime: ExecutionRuntime,
-    private readonly analyzer: OutcomeAnalyzer = new OutcomeAnalyzer(),
-    private readonly adapter: AgentAdapter = new GeminiAdapter()
+    private readonly analyzer: OutcomeAnalyzer,
+    private readonly adapter: AgentAdapter
   ) {}
 
   async start(dir: string, configDir?: string): Promise<void> {

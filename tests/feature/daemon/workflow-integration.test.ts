@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MockRuntime } from '../../helpers/mock-runtime';
 import { Agent } from '../../../src/daemon/agent';
+import { GeminiAdapter } from '../../../src/daemon/agent-gemini';
+import { OutcomeAnalyzer } from '../../../src/daemon/agent-outcome';
 
 describe('WorkflowManager Integration', () => {
   let workflowManager: WorkflowManager;
@@ -18,7 +20,7 @@ describe('WorkflowManager Integration', () => {
     fs.writeFileSync(path.join(testDir, 'tasks.md'), '- [ ] Task 1');
     
     mockRuntime = new MockRuntime();
-    workflowManager = new WorkflowManager(() => new Agent(mockRuntime));
+    workflowManager = new WorkflowManager(() => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
   });
 
   afterEach(() => {

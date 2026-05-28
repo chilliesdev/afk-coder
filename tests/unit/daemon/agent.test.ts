@@ -1,6 +1,7 @@
 import { Agent } from '../../../src/daemon/agent';
 import { MockRuntime } from '../../helpers/mock-runtime';
 import { AiderAdapter } from '../../../src/daemon/agent-aider';
+import { GeminiAdapter } from '../../../src/daemon/agent-gemini';
 import { MILESTONE_STATUS, MilestoneEvent } from '../../../src/common/types';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -28,7 +29,7 @@ describe('Agent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRuntime = new MockRuntime();
-    agent = new Agent(mockRuntime);
+    agent = new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter());
 
     (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
         if (p.endsWith('PRD.md')) return true;
@@ -49,7 +50,7 @@ describe('Agent', () => {
   });
 
   it('should use AiderAdapter if provided', async () => {
-    const aiderAgent = new Agent(mockRuntime, undefined, new AiderAdapter());
+    const aiderAgent = new Agent(mockRuntime, new OutcomeAnalyzer(), new AiderAdapter());
     await aiderAgent.runAutonomousLoop('/some/dir');
     expect(mockRuntime.lastPrompt).toContain('aider --yes --message');
     expect(mockRuntime.lastPrompt).toContain('tasks.md');
@@ -404,7 +405,7 @@ describe('Agent Task Generation', () => {
     }
     actualFs.mkdirSync(TEST_DIR);
     mockRuntime = new MockRuntime();
-    agent = new Agent(mockRuntime);
+    agent = new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter());
 
     (fs.existsSync as jest.Mock).mockImplementation((p: string) => actualFs.existsSync(p));
     (fs.readFileSync as jest.Mock).mockImplementation((p: string, encoding: any) => actualFs.readFileSync(p, encoding));

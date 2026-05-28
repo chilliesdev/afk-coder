@@ -3,6 +3,8 @@ import { MockRuntime } from '../../helpers/mock-runtime';
 import { TaskBoard } from '../../../src/daemon/task-board';
 import { InMemoryTaskStorage, FileSystemTaskStorage } from '../../../src/daemon/task-storage';
 import { Agent } from '../../../src/daemon/agent';
+import { GeminiAdapter } from '../../../src/daemon/agent-gemini';
+import { OutcomeAnalyzer } from '../../../src/daemon/agent-outcome';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'node:child_process';
@@ -55,7 +57,7 @@ describe('WorkflowManager', () => {
     mockTaskBoard = new TaskBoard(inMemoryStorage);
     
     workflowManager = new WorkflowManager(
-      () => new Agent(mockRuntime),
+      () => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()),
       () => mockTaskBoard
     );
 
@@ -1092,7 +1094,7 @@ describe('WorkflowManager', () => {
 
   describe('Agent Factory', () => {
     it('should pass the agent name to the factory', async () => {
-      const factory = jest.fn().mockImplementation(() => new Agent(mockRuntime));
+      const factory = jest.fn().mockImplementation(() => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
       workflowManager = new WorkflowManager(factory, () => mockTaskBoard);
 
       await workflowManager.startWorkflow('agent-test', testDir, { agent: 'aider' });
@@ -1102,7 +1104,7 @@ describe('WorkflowManager', () => {
     });
 
     it('should pass undefined to the factory if no agent is specified', async () => {
-      const factory = jest.fn().mockImplementation(() => new Agent(mockRuntime));
+      const factory = jest.fn().mockImplementation(() => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
       workflowManager = new WorkflowManager(factory, () => mockTaskBoard);
 
       await workflowManager.startWorkflow('agent-test-none', testDir);
@@ -1136,7 +1138,7 @@ describe('WorkflowManager', () => {
 
       const gitClientFactory = jest.fn().mockImplementation(() => mockGit);
       workflowManager = new WorkflowManager(
-        () => new Agent(mockRuntime),
+        () => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()),
         () => mockTaskBoard,
         undefined,
         gitClientFactory
@@ -1475,7 +1477,7 @@ describe('WorkflowManager', () => {
       const milestones: any[] = [];
       const onMilestone = (m: any) => milestones.push(m);
 
-      const agentFactory = () => new Agent(mockRuntime);
+      const agentFactory = () => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter());
       const taskBoardFactory = (p: string) => new TaskBoard(new FileSystemTaskStorage(p), new TaskValidator());
       const initWorkflowManager = new WorkflowManager(agentFactory, taskBoardFactory);
 
@@ -1518,7 +1520,7 @@ describe('WorkflowManager', () => {
 
       localMockRuntime = new MockRuntime();
       localMockRuntime.runDelay = 100;
-      localWorkflowManager = new WorkflowManager(() => new Agent(localMockRuntime));
+      localWorkflowManager = new WorkflowManager(() => new Agent(localMockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
     });
 
     afterEach(async () => {

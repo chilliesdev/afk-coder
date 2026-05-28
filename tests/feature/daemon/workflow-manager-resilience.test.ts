@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MockRuntime } from '../../helpers/mock-runtime';
 import { Agent } from '../../../src/daemon/agent';
+import { GeminiAdapter } from '../../../src/daemon/agent-gemini';
+import { OutcomeAnalyzer } from '../../../src/daemon/agent-outcome';
 
 describe('WorkflowManager Resilience', () => {
   let workflowManager: WorkflowManager;
@@ -16,7 +18,7 @@ describe('WorkflowManager Resilience', () => {
     fs.mkdirSync(baseTestDir);
 
     mockRuntime = new MockRuntime();
-    workflowManager = new WorkflowManager(() => new Agent(mockRuntime));
+    workflowManager = new WorkflowManager(() => new Agent(mockRuntime, new OutcomeAnalyzer(), new GeminiAdapter()));
   });
 
   afterEach(() => {
