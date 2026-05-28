@@ -322,7 +322,7 @@ program
         const randomSuffix = randomBytes(3).toString('hex');
 
         branch = options.branch || `${workflowName}-${randomSuffix}`;
-        dir = options.dir ? path.resolve(options.dir) : path.resolve(sourceRepo, '.afk-coder', 'worktress', `${workflowName}-${randomSuffix}`);
+        dir = options.dir ? path.resolve(options.dir) : path.resolve(sourceRepo, '.afk-coder', 'worktrees', `${workflowName}-${randomSuffix}`);
       } else {
         dir = path.resolve(options.dir || '.');
       }

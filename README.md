@@ -147,12 +147,12 @@ Log in to your Google account to enable Gemini Pro access. Ensure your OAuth cre
 afk login
 ```
 
-**Remote/Headless Servers:**
-If you are running the CLI on a remote server without a web browser, the local callback server on port 3000 won't be able to open a browser window automatically. To complete login:
-1. Open the generated authorization URL on your local machine's web browser.
-2. Complete the OAuth flow.
-3. The browser will redirect to `http://localhost:3000/` (which may fail to load locally). Copy the full redirect URL containing `?code=...` from the browser's address bar.
-4. Paste the URL directly into the CLI prompt: `If running on a remote server, paste the redirect URL here:` and press Enter.
+**Logging in (Local or Remote/Headless Servers):**
+1. Copy the generated authorization URL printed in your terminal and open it in your local machine's web browser.
+2. Complete the Google OAuth flow in the browser.
+3. If logging in from a local server, the browser will redirect to `http://localhost:3000/` and complete the login automatically.
+4. If running the CLI on a remote/headless server (or if the automatic redirect does not complete), copy the full redirect URL containing `?code=...` from the browser's address bar.
+5. Paste that URL directly into the CLI prompt: `If running on a remote server, paste the redirect URL here:` and press Enter to finish authentication.
 
 **Troubleshooting:** If you encounter an `EADDRINUSE` error (port 3000 is occupied), free the port by running `npx kill-port 3000` and try logging in again.
 
@@ -164,7 +164,7 @@ afk start my-feature --dir /path/to/project
 To run the workflow in an isolated git worktree, use the `-w` or `--worktree` flag. If `--dir` and `--branch` are not provided, they will be automatically generated with a random suffix based on the workflow name to avoid conflicts:
 ```bash
 afk start my-feature -w
-# This creates a worktree directory like ./.afk-coder/worktress/my-feature-5a1b3c and a branch named my-feature-5a1b3c
+# This creates a worktree directory like ./.afk-coder/worktrees/my-feature-5a1b3c and a branch named my-feature-5a1b3c
 ```
 You can also explicitly specify the branch and directory if desired:
 ```bash
@@ -192,10 +192,10 @@ afk logs my-feature -f
 | :--- | :--- |
 | `init [--dir <path>] [--prd <filename>] [--force]` | Extracts tasks from a PRD file into `tasks.md` using a Docker sandbox. `--dir` defaults to `.`, and `--prd` defaults to `PRD.md`. Use `--force` to overwrite existing `tasks.md`. |
 | `login` | Performs Google OAuth 2.0 flow. |
-| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Runs in a git worktree via `-w` or `--worktree`. If `--dir` or `--branch` are omitted when running in a worktree, they are automatically generated as `.afk-coder/worktress/<name>-<randomSuffix>` (configuring `safe.directory` automatically). Specifying `--agent` selects the agent adapter (e.g. `gemini` or `aider`). |
+| `start <name> [--dir <path>] [-w\|--worktree] [--branch <name>] [--agent <name>]` | Hands over task execution to the daemon. Runs in a git worktree via `-w` or `--worktree`. If `--dir` or `--branch` are omitted when running in a worktree, they are automatically generated as `.afk-coder/worktrees/<name>-<randomSuffix>` (configuring `safe.directory` automatically). Specifying `--agent` selects the agent adapter (e.g. `gemini` or `aider`). |
 | `list` | Lists all active and completed workflows. |
 | `status <name> [--no-color]` | Shows detailed status, progress, phase, QA cycles, token usage, and recent tasks. Use `--no-color` to disable colored output. |
-| `logs <name> [-f\|--follow] [--tail <lines>] [--json] [--raw] [--no-color]` | Streams or outputs workflow execution logs. Use `-f` to follow logs, `--tail <lines>` to specify lines count, `--json` for raw JSON logs, `--raw` for unformatted file output, and `--no-color` to disable color. |
+| `logs <name> [-f\|--follow] [--tail <lines>] [--json] [--raw] [--no-color]` | Streams or outputs workflow execution logs. Use `-f` to follow logs (defaults to tailing the last 20 lines if `--tail` is omitted), `--tail <lines>` to specify the lines count, `--json` for raw JSON logs, `--raw` for unformatted file output, and `--no-color` to disable color. |
 | `kill <name>` | Terminates a running workflow. |
 | `remove <name> [-d\|--delete-dir]` | Cleans up a finished or failed workflow from the daemon. Archives `tasks.md` and `PRD.md` to `.afk-coder/tasks/<name>/`. Automatically creates a git commit of uncommitted work if `git.autoCommit` is enabled (generating messages via AI). Performs permission cleanup (using a temporary `chown` Docker container if host directory deletion fails). Use `-d` or `--delete-dir` to delete the directory from disk (requires confirmation for non-worktree setups). |
 | `config show` | Prints the active JSON configuration to the console. |
@@ -234,6 +234,26 @@ When the Coding Phase completes (all tasks in `tasks.md` are marked `[x]`), the 
 ```bash
 npm install
 npm run build
+```
+
+### Running/Testing Locally
+To run the CLI or daemon directly from source during development:
+```bash
+# Run the CLI
+npm start -- <command> [options]
+# Example: npm start -- list
+
+# Run the daemon
+npm run daemon
+```
+
+### Code Quality (Linting)
+```bash
+# Run ESLint check
+npm run lint
+
+# Auto-fix linting issues
+npm run lint:fix
 ```
 
 ### Running Tests
