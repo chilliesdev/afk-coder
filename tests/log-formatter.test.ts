@@ -62,8 +62,12 @@ describe('LogFormatter', () => {
   });
 
   it('should colorize levels if requested', () => {
-    const originalIsTTY = process.stdout.isTTY;
-    (process.stdout as any).isTTY = true;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+      writable: true
+    });
     try {
       const colorFormatter = new LogFormatter({ color: true });
       const line = JSON.stringify({ level: 'error', message: 'fail' });
@@ -71,7 +75,11 @@ describe('LogFormatter', () => {
       // [ERROR] in red is \u001B[31m[ERROR]\u001B[0m
       expect(result).toContain('\u001B[31m[ERROR]\u001B[0m');
     } finally {
-      (process.stdout as any).isTTY = originalIsTTY;
+      if (originalDescriptor) {
+        Object.defineProperty(process.stdout, 'isTTY', originalDescriptor);
+      } else {
+        delete (process.stdout as any).isTTY;
+      }
     }
   });
 });

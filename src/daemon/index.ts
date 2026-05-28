@@ -31,13 +31,13 @@ let maxFiles = 5;
 
 if (config.daemon?.logRotation?.maxSize !== undefined) {
   const sizeVal = Number(config.daemon.logRotation.maxSize);
-  if (!isNaN(sizeVal) && sizeVal >= 0) {
+  if (!Number.isNaN(sizeVal) && sizeVal >= 0) {
     maxSize = sizeVal;
   }
 }
 if (config.daemon?.logRotation?.maxFiles !== undefined) {
   const filesVal = Number(config.daemon.logRotation.maxFiles);
-  if (!isNaN(filesVal) && filesVal >= 0) {
+  if (!Number.isNaN(filesVal) && filesVal >= 0) {
     maxFiles = filesVal;
   }
 }
@@ -112,10 +112,19 @@ if (fs.existsSync(SOCKET_PATH)) {
 }
 
 const server = net.createServer((socket) => {
+  socket.on('error', (error: any) => {
+    daemonLogger.error('IPC socket connection error', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack,
+    });
+  });
+
   socket.on('data', async (data) => {
     let keepOpen = false;
+    let request: any = null;
     try {
-      const request = JSON.parse(data.toString());
+      request = JSON.parse(data.toString());
       let response: DaemonResponse = { success: true };
 
       switch (request.command) {
@@ -228,6 +237,12 @@ const server = net.createServer((socket) => {
         socket.write(JSON.stringify(response) + '\n');
       }
     } catch (error: any) {
+      daemonLogger.error('IPC command execution failed', {
+        command: request?.command,
+        args: request?.args,
+        error: error.message,
+        stack: error.stack,
+      });
       socket.write(JSON.stringify({ success: false, message: error.message }) + '\n');
       keepOpen = false;
     } finally {
@@ -235,6 +250,14 @@ const server = net.createServer((socket) => {
         socket.end();
       }
     }
+  });
+});
+
+server.on('error', (error: any) => {
+  daemonLogger.error('Daemon server error', {
+    code: error.code,
+    message: error.message,
+    stack: error.stack,
   });
 });
 
@@ -286,4 +309,26 @@ process.on('SIGTERM', () => {
     fs.unlinkSync(SOCKET_PATH);
   }
   process.exit();
+});
+
+process.on('uncaughtException', (error: Error) => {
+  daemonLogger.error('Uncaught Exception in daemon process', {
+    message: error.message,
+    stack: error.stack,
+  });
+  if (fs.existsSync(SOCKET_PATH)) {
+    try {
+      fs.unlinkSync(SOCKET_PATH);
+    } catch {
+      // Ignore socket unlink error on crash
+    }
+  }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  daemonLogger.error('Unhandled Promise Rejection in daemon process', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
 });
