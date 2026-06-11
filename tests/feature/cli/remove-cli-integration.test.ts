@@ -18,7 +18,9 @@ const mockClose = jest.fn();
 
 // Mock readline
 jest.mock('node:readline', () => {
+  const actualReadline = jest.requireActual('node:readline');
   return {
+    ...actualReadline,
     createInterface: jest.fn().mockImplementation(() => {
       return {
         question: mockQuestion,
