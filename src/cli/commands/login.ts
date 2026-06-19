@@ -18,6 +18,7 @@ export class LoginCommand extends BaseCommand {
   }
 
   execute(): Promise<void> {
+    // eslint-disable-next-line no-async-promise-executor
     return new Promise<void>(async (resolve, reject) => {
       const { OAuth2Client } = await import('google-auth-library');
       const { ConfigManager } = await import('../../common/config');
@@ -113,8 +114,9 @@ export class LoginCommand extends BaseCommand {
     main { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 90%; }
     h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #111827; }
     p { margin-bottom: 1.5rem; color: #4b5563; }
-    .btn { display: inline-block; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; text-decoration: none; }
+    .btn { display: inline-block; padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; text-decoration: none; transition: all 0.2s ease; }
     .btn:hover { background-color: #2563eb; }
+    .btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
   </style>
 </head>
 <body>
