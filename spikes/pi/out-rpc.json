@@ -1,0 +1,456 @@
+{
+  "results": {
+    "get_state": {
+      "id": "1",
+      "type": "response",
+      "command": "get_state",
+      "success": true,
+      "data": {
+        "model": {
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5 (latest)",
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "baseUrl": "https://api.anthropic.com",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15,
+            "cacheRead": 0.3,
+            "cacheWrite": 3.75
+          },
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "compat": {
+            "supportsStrictTools": true
+          }
+        },
+        "thinkingLevel": "medium",
+        "isStreaming": false,
+        "isCompacting": false,
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "sessionFile": "/root/.pi/agent/sessions/--app--/2026-08-11T10-43-41-471Z_019ff06b-c11f-78b9-9e32-58da75079c0a.jsonl",
+        "sessionId": "019ff06b-c11f-78b9-9e32-58da75079c0a",
+        "autoCompactionEnabled": true,
+        "messageCount": 0,
+        "pendingMessageCount": 0
+      }
+    },
+    "prompt_ack": {
+      "id": "2",
+      "type": "response",
+      "command": "prompt",
+      "success": true
+    },
+    "event_types": [
+      "agent_start",
+      "turn_start",
+      "message_start",
+      "message_end",
+      "message_start",
+      "message_end",
+      "turn_end",
+      "agent_end",
+      "agent_settled"
+    ],
+    "file_after": "module.exports = (a, b) => a - b;\n",
+    "stats": {
+      "id": "3",
+      "type": "response",
+      "command": "get_session_stats",
+      "success": true,
+      "data": {
+        "sessionFile": "/root/.pi/agent/sessions/--app--/2026-08-11T10-43-41-471Z_019ff06b-c11f-78b9-9e32-58da75079c0a.jsonl",
+        "sessionId": "019ff06b-c11f-78b9-9e32-58da75079c0a",
+        "userMessages": 1,
+        "assistantMessages": 1,
+        "toolCalls": 0,
+        "toolResults": 0,
+        "totalMessages": 2,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        },
+        "cost": 0,
+        "contextUsage": {
+          "tokens": 17,
+          "contextWindow": 1000000,
+          "percent": 0.0017
+        }
+      }
+    },
+    "abort": {
+      "id": "4",
+      "type": "response",
+      "command": "abort",
+      "success": true
+    },
+    "state_after_abort": {
+      "id": "5",
+      "type": "response",
+      "command": "get_state",
+      "success": true,
+      "data": {
+        "model": {
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5 (latest)",
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "baseUrl": "https://api.anthropic.com",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15,
+            "cacheRead": 0.3,
+            "cacheWrite": 3.75
+          },
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "compat": {
+            "supportsStrictTools": true
+          }
+        },
+        "thinkingLevel": "medium",
+        "isStreaming": false,
+        "isCompacting": false,
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "sessionFile": "/root/.pi/agent/sessions/--app--/2026-08-11T10-43-41-471Z_019ff06b-c11f-78b9-9e32-58da75079c0a.jsonl",
+        "sessionId": "019ff06b-c11f-78b9-9e32-58da75079c0a",
+        "autoCompactionEnabled": true,
+        "messageCount": 2,
+        "pendingMessageCount": 0
+      }
+    },
+    "pi_procs": {
+      "before": 1,
+      "after": 0
+    },
+    "exec_inspect": {
+      "ID": "19338f4dd9faa3fb5e49c5ff6ce502fb4b084dfc8f4468daa9746de70dbd8932",
+      "Running": false,
+      "ExitCode": 0,
+      "ProcessConfig": {
+        "tty": false,
+        "entrypoint": "pi",
+        "arguments": [
+          "--mode",
+          "rpc",
+          "--provider",
+          "anthropic",
+          "--model",
+          "claude-sonnet-4-5",
+          "--api-key",
+          "sk-ant-api03-deliberately-invalid"
+        ],
+        "privileged": false,
+        "user": "root"
+      },
+      "OpenStdin": true,
+      "OpenStderr": true,
+      "OpenStdout": true,
+      "CanRemove": false,
+      "ContainerID": "b171e47bbcdb52b9ca4e79f305901bc922acd67379f170f06d292c8a601beac7",
+      "DetachKeys": "",
+      "Pid": 5039
+    },
+    "orphan_on_socket_destroy": {
+      "aliveBefore": 1,
+      "aliveAfter": 0
+    },
+    "stderr_tail": ""
+  },
+  "allEvents": [
+    {
+      "id": "1",
+      "type": "response",
+      "command": "get_state",
+      "success": true,
+      "data": {
+        "model": {
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5 (latest)",
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "baseUrl": "https://api.anthropic.com",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15,
+            "cacheRead": 0.3,
+            "cacheWrite": 3.75
+          },
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "compat": {
+            "supportsStrictTools": true
+          }
+        },
+        "thinkingLevel": "medium",
+        "isStreaming": false,
+        "isCompacting": false,
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "sessionFile": "/root/.pi/agent/sessions/--app--/2026-08-11T10-43-41-471Z_019ff06b-c11f-78b9-9e32-58da75079c0a.jsonl",
+        "sessionId": "019ff06b-c11f-78b9-9e32-58da75079c0a",
+        "autoCompactionEnabled": true,
+        "messageCount": 0,
+        "pendingMessageCount": 0
+      }
+    },
+    {
+      "id": "2",
+      "type": "response",
+      "command": "prompt",
+      "success": true
+    },
+    {
+      "type": "agent_start"
+    },
+    {
+      "type": "turn_start"
+    },
+    {
+      "type": "message_start",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Fix the bug in add.js so it adds instead of subtracts. Then stop."
+          }
+        ],
+        "timestamp": 1786445021509
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Fix the bug in add.js so it adds instead of subtracts. Then stop."
+          }
+        ],
+        "timestamp": 1786445021509
+      }
+    },
+    {
+      "type": "message_start",
+      "message": {
+        "role": "assistant",
+        "content": [],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "error",
+        "timestamp": 1786445021527,
+        "errorMessage": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"API key is invalid.\"},\"request_id\":null}"
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "assistant",
+        "content": [],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "error",
+        "timestamp": 1786445021527,
+        "errorMessage": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"API key is invalid.\"},\"request_id\":null}"
+      }
+    },
+    {
+      "type": "turn_end",
+      "message": {
+        "role": "assistant",
+        "content": [],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "error",
+        "timestamp": 1786445021527,
+        "errorMessage": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"API key is invalid.\"},\"request_id\":null}"
+      },
+      "toolResults": []
+    },
+    {
+      "type": "agent_end",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Fix the bug in add.js so it adds instead of subtracts. Then stop."
+            }
+          ],
+          "timestamp": 1786445021509
+        },
+        {
+          "role": "assistant",
+          "content": [],
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "usage": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "totalTokens": 0,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "total": 0
+            }
+          },
+          "stopReason": "error",
+          "timestamp": 1786445021527,
+          "errorMessage": "401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"API key is invalid.\"},\"request_id\":null}"
+        }
+      ],
+      "willRetry": false
+    },
+    {
+      "type": "agent_settled"
+    },
+    {
+      "id": "3",
+      "type": "response",
+      "command": "get_session_stats",
+      "success": true,
+      "data": {
+        "sessionFile": "/root/.pi/agent/sessions/--app--/2026-08-11T10-43-41-471Z_019ff06b-c11f-78b9-9e32-58da75079c0a.jsonl",
+        "sessionId": "019ff06b-c11f-78b9-9e32-58da75079c0a",
+        "userMessages": 1,
+        "assistantMessages": 1,
+        "toolCalls": 0,
+        "toolResults": 0,
+        "totalMessages": 2,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        },
+        "cost": 0,
+        "contextUsage": {
+          "tokens": 17,
+          "contextWindow": 1000000,
+          "percent": 0.0017
+        }
+      }
+    },
+    {
+      "id": "4",
+      "type": "response",
+      "command": "abort",
+      "success": true
+    },
+    {
+      "id": "5",
+      "type": "response",
+      "command": "get_state",
+      "success": true,
+      "data": {
+        "model": {
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5 (latest)",
+          "api": "anthropic-messages",
+          "provider": "anthropic",
+          "baseUrl": "https://api.anthropic.com",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15,
+            "cacheRead": 0.3,
+            "cacheWrite": 3.75
+          },
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "compat": {
+            "supportsStrictTools": true
+          }
+        },
+        "thinkingLevel": "medium",
+        "isStreaming": false,
+        "isCompacting": false,
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "sessionFile": "/root/.pi/agent/sessions/--app--/2026-08-11T10-43-41-471Z_019ff06b-c11f-78b9-9e32-58da75079c0a.jsonl",
+        "sessionId": "019ff06b-c11f-78b9-9e32-58da75079c0a",
+        "autoCompactionEnabled": true,
+        "messageCount": 2,
+        "pendingMessageCount": 0
+      }
+    }
+  ]
+}
