@@ -3,15 +3,20 @@
 Rough and disposable. Not production code, not wired into `src/`, no tests.
 
 ```bash
-docker build -t afk-pi-spike:0.84.1 spikes/pi   # node:24-slim + pi 0.84.1
-node spikes/pi/run-json.mjs                     # spike 1: pi -p --mode json via exec-and-wait
-node spikes/pi/run-rpc.mjs                      # spike 2: pi --mode rpc over a held-open exec
-node spikes/pi/framing-check.mjs                # readline vs. LF-only framing
+docker build -t afk-pi-spike:0.84.1 spikes/pi        # node:24-slim + pi 0.84.1
+zsh -ic 'node spikes/pi/run-json.mjs'                # spike 1: pi -p --mode json via exec-and-wait
+zsh -ic 'node spikes/pi/run-rpc.mjs'                 # spike 2: pi --mode rpc over a held-open exec
+node spikes/pi/framing-check.mjs                     # readline vs. LF-only framing
 ```
 
-Set `ANTHROPIC_API_KEY` (or `PI_API_KEY`) on the host to run the real-task path.
-Without one, both spikes fall back to a deliberately invalid key so the failure
-paths still get exercised end to end.
+`credential.mjs` picks up whichever provider key the host has
+(`DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`);
+override with `PI_PROVIDER` / `PI_MODEL`. Without any key both spikes fall back
+to a deliberately invalid one so the failure paths still get exercised.
+
+**The `zsh -ic` matters**: the key lives in `~/.zshrc`, which only an
+*interactive* zsh sources. `zsh -lc` and plain `node` will not see it. Runs
+below were against **DeepSeek** (`deepseek-v4-pro`), per #58.
 
 Files:
 
@@ -102,12 +107,27 @@ timeout. A parent must **race the ack against `agent_settled`** and treat
 
 | path | result |
 | --- | --- |
-| in-band `{"type":"abort"}` | `success: true`, **channel still usable** — `get_state` answered after it |
+| in-band `{"type":"abort"}` **mid-`write`** | tool returns `"Operation aborted"`, `isError: true`, **no file on disk** — not a truncated one |
+| in-band abort, then another `prompt` | same session took the next turn through to `agent_settled` |
+| in-band abort while idle | `success: true`, channel still usable — `get_state` answered after it |
 | stdin EOF (`stream.end()`) | pi exits, exec `ExitCode: 0`, pi processes in container `1 → 0` |
 | parent socket destroyed, no EOF (daemon crash) | pi processes `1 → 0` — **no orphan**; Docker reaps the exec when the hijacked connection dies |
 
 So `Agent.kill()` has a graceful path (abort, keeping the session) *and* a hard
 path (end the stream), and neither leaves anything behind in the container.
+
+The mid-`write` case is the one that mattered. The spike aborts on the first
+`tool_execution_start` after issuing a 12-file writing task; that landed on
+`{"toolName":"write","args":{"path":"/app/step1.txt","content":"one"}}`, and the
+matching `tool_execution_end` came back:
+
+```json
+{"type":"tool_execution_end","toolName":"write","result":{"content":[{"type":"text","text":"Operation aborted"}]},"isError":true}
+```
+
+`fs.readdirSync` on the host side of the bind mount then found **zero**
+`step*.txt` files. Aborting mid-edit does not leave partial writes, and
+`isError: true` makes the aborted call structurally visible.
 
 Note: `ps` inside the container shows the process as bare **`pi`** — pi rewrites
 its process title, so its argv is invisible to `ps`. Match on `^pi$`, not on
@@ -144,12 +164,28 @@ jsonl reader produced 1 records (expected 1)
 
 ---
 
-## Not answered — needs a real credential (#58)
+### 8. The real-task path, once #58 landed a DeepSeek key
 
-- A real coding task completed against the scratch repo (does pi's edit tool
-  actually write through the bind mount, does the loop terminate sensibly).
-- Non-zero token usage and cost readings on a successful turn.
-- **Mid-run abort during actual work.** The forced-failure turns end in ~1s, so
-  abort was only tested against an idle session. The interesting question —
-  does `abort` mid-tool-call leave a half-written file — is untested.
-- Quota exhaustion specifically, as distinct from a 401.
+Both mechanisms completed the same task **inside the container**, editing
+through the bind mount — `add.js` went from `a - b` to `a + b`, verified from
+the host after the container was gone.
+
+- `--mode json`: exit 0, 3 turns, `stopReason: "stop"`, `rawStopReason: "stop"`,
+  `willRetry: false`, `agent_settled`. Tools were `read` then `edit`.
+- RPC: identical lifecycle over the channel, plus `get_session_stats` →
+  `{tokens:{input:232,output:222,cacheRead:4608,total:5062}, cost:0.00031,
+  toolCalls:2, toolResults:2, contextUsage:{percent:0.18}}`.
+
+Event vocabulary observed on a successful turn (both modes):
+`session`(json only), `agent_start`, `turn_start`, `message_start`,
+`message_update` (~55/turn — the streaming chatter), `message_end`,
+`tool_execution_start`, `tool_execution_end`, `turn_end`, `agent_end`,
+`agent_settled`. Per-turn `usage` carries `reasoning` tokens separately, and
+cache reads are reported (1664 cacheRead on the last turn).
+
+## Still not answered
+
+- **Quota exhaustion** specifically, as distinct from a 401. Would need a
+  genuinely exhausted account; the 401 path is a proxy for it and lands in the
+  same swallowed-exit-code bucket, but the `errorMessage` shape is unverified.
+- **Google OAuth**, deliberately — #62 owns it.

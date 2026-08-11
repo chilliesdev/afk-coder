@@ -1,16 +1,15 @@
 // Spike 2: RPC into the container.
-//   node spikes/pi/run-rpc.mjs
-// Reads ANTHROPIC_API_KEY (or PI_API_KEY) from the host env if present; without
+//   zsh -ic 'node spikes/pi/run-rpc.mjs'
+// Uses whatever provider credential the host has (see credential.mjs); without
 // one, everything up to the first provider call still exercises the channel.
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { startContainer, stopContainer, countPiProcesses } from './container.mjs';
 import { DockerRpcSession } from './rpc-client.mjs';
+import { resolveCredential, FAKE } from './credential.mjs';
 
-const KEY = process.env.PI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? '';
-const PROVIDER = process.env.PI_PROVIDER ?? 'anthropic';
-const MODEL = process.env.PI_MODEL ?? '';
+const CRED = resolveCredential();
 
 const log = (...a) => console.log('[rpc]', ...a);
 
@@ -24,23 +23,21 @@ function makeScratchRepo() {
 async function main() {
   const ws = makeScratchRepo();
   log('workspace', ws);
-  log('api key present:', KEY ? 'yes' : 'NO (provider calls will fail)');
+  log('credential:', CRED ? `${CRED.provider} via ${CRED.envVar}` : 'NONE (forcing a 401)');
 
+  // Credential goes in as an env var, never on argv: `docker exec inspect`
+  // echoes ProcessConfig.arguments back verbatim.
   const env = ['PI_OFFLINE=1'];
-  if (KEY) env.push(`ANTHROPIC_API_KEY=${KEY}`);
+  if (CRED) env.push(`${CRED.envVar}=${CRED.value}`);
 
   const { docker, container } = await startContainer(ws, env);
   const session = new DockerRpcSession(docker, container);
 
-  const results = {};
+  const results = { provider: CRED?.provider ?? FAKE.provider };
   try {
-    const cmd = ['pi', '--mode', 'rpc', '--provider', PROVIDER];
-    if (MODEL) cmd.push('--model', MODEL);
-    if (!KEY) {
-      // No real credential: force a turn that reaches the provider and 401s,
-      // so the failure path is exercised anyway. --api-key needs an explicit model.
-      cmd.push('--model', 'claude-sonnet-4-5', '--api-key', 'sk-ant-api03-deliberately-invalid');
-    }
+    const cmd = ['pi', '--mode', 'rpc', '--provider', CRED?.provider ?? FAKE.provider];
+    if (CRED?.model) cmd.push('--model', CRED.model);
+    if (!CRED) cmd.push('--model', FAKE.model, '--api-key', FAKE.key);
     await session.start(cmd);
     log('exec started, channel open');
 
@@ -53,7 +50,7 @@ async function main() {
     try {
       const { ack, events } = await session.promptAndWaitForSettled(
         'Fix the bug in add.js so it adds instead of subtracts. Then stop.',
-        KEY ? 180_000 : 25_000,
+        CRED ? 180_000 : 25_000,
       );
       results.prompt_ack = ack;
       results.event_types = events.map((e) => e.type ?? e.event?.type);
@@ -77,11 +74,60 @@ async function main() {
       log('get_session_stats failed:', String(err));
     }
 
-    // --- 4. In-band abort ------------------------------------------------
+    // --- 4. In-band abort, mid-tool-call ---------------------------------
+    // The question that matters for Agent.kill(): does aborting while pi is
+    // actually editing leave a half-written file, and does the session survive?
+    if (CRED) {
+      try {
+        const sawTool = new Promise((resolve) => {
+          session.onEvent((msg) => {
+            const t = msg.type ?? msg.event?.type;
+            if (t === 'tool_execution_start') resolve(t);
+          });
+        });
+        await session.send('prompt', {
+          message:
+            'Create files step1.txt through step12.txt, one at a time, each containing its own number spelled out in words. Work slowly and do not stop early.',
+        });
+        const firstTool = await Promise.race([
+          sawTool,
+          new Promise((r) => setTimeout(() => r('timeout'), 60_000)),
+        ]);
+        log('first tool activity ->', firstTool);
+        const abortAck = await session.abort();
+        results.abort_mid_run = abortAck;
+        log('abort mid-run ->', JSON.stringify(abortAck).slice(0, 200));
+
+        await new Promise((r) => setTimeout(r, 2000));
+        const created = fs.readdirSync(ws).filter((f) => /^step\d+\.txt$/.test(f)).sort();
+        results.files_after_abort = created.map((f) => ({
+          f,
+          bytes: fs.statSync(path.join(ws, f)).size,
+          content: fs.readFileSync(path.join(ws, f), 'utf8').slice(0, 60),
+        }));
+        log('files created before abort ->', JSON.stringify(results.files_after_abort));
+
+        // Does the session survive an abort well enough to take another turn?
+        const resumed = await session.promptAndWaitForSettled(
+          'How many step files did you create before being interrupted? Answer in one short sentence, do not create more.',
+          120_000,
+        );
+        results.turn_after_abort = {
+          ack: resumed.ack,
+          types: resumed.events.map((e) => e.type ?? e.event?.type),
+        };
+        log('turn after abort ->', JSON.stringify(results.turn_after_abort).slice(0, 400));
+      } catch (err) {
+        results.abort_mid_run_error = String(err);
+        log('mid-run abort path failed:', String(err));
+      }
+    }
+
+    // --- 4b. In-band abort while idle ------------------------------------
     try {
       const abortAck = await session.abort();
-      results.abort = abortAck;
-      log('abort ->', JSON.stringify(abortAck).slice(0, 300));
+      results.abort_idle = abortAck;
+      log('abort (idle) ->', JSON.stringify(abortAck).slice(0, 200));
       const after = await session.send('get_state');
       results.state_after_abort = after;
       log('channel alive after abort ->', after.success === true);

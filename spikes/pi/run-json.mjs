@@ -5,8 +5,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { startContainer, stopContainer } from './container.mjs';
+import { resolveCredential, FAKE } from './credential.mjs';
 
-const KEY = process.env.PI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? '';
+const CRED = resolveCredential();
 const log = (...a) => console.log('[json]', ...a);
 
 // Verbatim port of DockerRuntime.run()'s collect-and-demux, so the spike
@@ -41,24 +42,24 @@ async function main() {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-spike-ws-'));
   fs.writeFileSync(path.join(ws, 'add.js'), 'module.exports = (a, b) => a - b;\n');
   const env = ['PI_OFFLINE=1'];
-  if (KEY) env.push(`ANTHROPIC_API_KEY=${KEY}`);
+  if (CRED) env.push(`${CRED.envVar}=${CRED.value}`);
   const { container } = await startContainer(ws, env);
+  log('credential:', CRED ? `${CRED.provider} via ${CRED.envVar}` : 'NONE');
 
+  const unset = CRED ? `unset ${CRED.envVar}; ` : '';
   const cases = {
     // Auth failure, no key at all — the cheapest forced failure.
-    no_key_json: 'unset ANTHROPIC_API_KEY; pi -p --mode json --provider anthropic "say hi"',
-    no_key_text: 'unset ANTHROPIC_API_KEY; pi -p --provider anthropic "say hi"',
+    no_key_json: `${unset}pi -p --mode json --provider anthropic "say hi"`,
+    no_key_text: `${unset}pi -p --provider anthropic "say hi"`,
     // Auth failure that reaches the provider and comes back 401 *inside the
     // turn* — the case the "always exits 0" claim is actually about.
     // --api-key requires an explicit model, unlike the env var.
-    bad_key_json:
-      'pi -p --mode json --provider anthropic --model claude-sonnet-4-5 --api-key sk-ant-api03-deliberately-invalid "say hi"',
-    bad_key_text:
-      'pi -p --provider anthropic --model claude-sonnet-4-5 --api-key sk-ant-api03-deliberately-invalid "say hi"',
+    bad_key_json: `${unset}pi -p --mode json --provider ${FAKE.provider} --model ${FAKE.model} --api-key ${FAKE.key} "say hi"`,
+    bad_key_text: `${unset}pi -p --provider ${FAKE.provider} --model ${FAKE.model} --api-key ${FAKE.key} "say hi"`,
   };
-  if (KEY) {
-    cases.real_task_json =
-      'pi -p --mode json --provider anthropic "Fix the bug in add.js so it adds instead of subtracts. Then stop."';
+  if (CRED) {
+    const model = CRED.model ? ` --model ${CRED.model}` : '';
+    cases.real_task_json = `pi -p --mode json --provider ${CRED.provider}${model} "Fix the bug in add.js so it adds instead of subtracts. Then stop."`;
   }
 
   const results = {};
@@ -69,7 +70,7 @@ async function main() {
       log(`--- ${name}: exitCode=${r.exitCode}`);
       log(r.logs.trim().slice(0, 700).replace(/\n/g, '\n      '));
     }
-    if (KEY) results.file_after = fs.readFileSync(path.join(ws, 'add.js'), 'utf8');
+    if (CRED) results.file_after = fs.readFileSync(path.join(ws, 'add.js'), 'utf8');
   } finally {
     await stopContainer(container);
     fs.writeFileSync(
